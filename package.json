@@ -1,0 +1,13 @@
+{
+  "name": "groxo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "admin",
+    "mobile/*"
+  ],
+  "scripts": {
+    "start:backend": "cd backend && node server.js",
+    "start:admin": "cd admin && npm start"
+  }
+}
