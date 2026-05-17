@@ -1,12 +1,10 @@
-﻿const router = require('express').Router();
-const orderCtrl = require('../controllers/orderController');
-const { authMiddleware, roleAuth } = require('../middleware/authMiddleware');
-
-router.post('/', authMiddleware, roleAuth('customer'), orderCtrl.createOrder);
-router.get('/', authMiddleware, orderCtrl.getOrders);
-router.get('/:id', authMiddleware, orderCtrl.getOrder);
-router.put('/:id/status', authMiddleware, roleAuth('rider', 'wholesaler', 'admin'), orderCtrl.updateOrderStatus);
-router.put('/:id/cancel', authMiddleware, roleAuth('customer', 'admin'), orderCtrl.cancelOrder);
-router.put('/:id/assign-rider', authMiddleware, roleAuth('admin', 'wholesaler'), orderCtrl.assignRider);
-
+﻿const express = require('express');
+const router = express.Router();
+const auth = require('../middleware/auth');
+const roleAuth = require('../middleware/roleAuth');
+const ctrl = require('../controllers/orderController');
+router.post('/', auth, roleAuth('customer'), ctrl.createOrder);
+router.get('/', auth, ctrl.getOrders);
+router.get('/:id', auth, ctrl.getOrder);
+router.put('/:id/status', auth, roleAuth('rider','admin'), ctrl.updateOrderStatus);
 module.exports = router;
