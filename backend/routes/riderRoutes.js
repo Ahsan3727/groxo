@@ -1,9 +1,18 @@
 ﻿const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const roleAuth = require('../middleware/roleAuth');
-const ctrl = require('../controllers/riderController');
-router.get('/', auth, roleAuth('admin'), ctrl.getRiders);
-router.get('/:id', auth, ctrl.getRider);
-router.put('/:id', auth, ctrl.updateRider);
+const { protect } = require('../middleware/authMiddleware');
+
+router.get('/dashboard', protect, async (req, res) => {
+  if (req.user.role !== 'rider') {
+    return res.status(403).json({ message: 'Rider access only' });
+  }
+  res.json({
+    todayEarnings: 0,
+    weekEarnings: 0,
+    monthEarnings: 0,
+    totalDeliveries: 0,
+    rating: 5.0
+  });
+});
+
 module.exports = router;

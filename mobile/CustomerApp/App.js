@@ -1,21 +1,60 @@
-﻿import 'react-native-gesture-handler';
-import React from 'react';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AuthProvider } from './context/AuthContext';
+﻿import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
-import { OrderProvider } from './context/OrderContext';
-import AppNavigator from './navigation/AppNavigator';
+import LoginScreen from './screens/LoginScreen';
+import SignupScreen from './screens/SignupScreen';
+import HomeScreen from './screens/HomeScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import ProductDetailScreen from './screens/ProductDetailScreen';
+import CartScreen from './screens/CartScreen';
+import SearchScreen from './screens/SearchScreen';
+import ProductListScreen from './screens/ProductListScreen';
+import { ActivityIndicator, View } from 'react-native';
+
+const Stack = createNativeStackNavigator();
+
+const AppNavigator = () => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+        <ActivityIndicator size="large" color="#2196F3" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!isAuthenticated ? (
+        <>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Signup" component={SignupScreen} />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+          <Stack.Screen name="Cart" component={CartScreen} />
+          <Stack.Screen name="Search" component={SearchScreen} />
+          <Stack.Screen name="ProductList" component={ProductListScreen} />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+};
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <CartProvider>
-          <OrderProvider>
-            <AppNavigator />
-          </OrderProvider>
-        </CartProvider>
-      </AuthProvider>
-    </GestureHandlerRootView>
+    <AuthProvider>
+      <CartProvider>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </CartProvider>
+    </AuthProvider>
   );
 }

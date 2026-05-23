@@ -1,53 +1,129 @@
-﻿import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+﻿import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { AuthProvider, useAdminAuth } from './context/AuthContext';
-import Layout from './layouts/Layout';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
+// Layout Components
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+
+// Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import HubMap from './pages/HubMap';
 import UserManagement from './pages/UserManagement';
-import OrderManagement from './pages/OrderManagement';
-import ProductApprovals from './pages/ProductApprovals';
-import Transactions from './pages/Transactions';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
-import SupportTickets from './pages/SupportTickets';
 
-const PrivateRoute = ({ children }) => {
-  const { admin, loading } = useAdminAuth();
-  if (loading) return <div className="loading">Loading...</div>;
-  return admin ? children : <Navigate to="/login" />;
+// Services
+import api from './services/api';
+
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('adminToken');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 };
 
-const AppRoutes = () => {
+// Main App Layout (with sidebar and header)
+const AppLayout = ({ children }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminInfo');
+    navigate('/login');
+  };
+
+  // Get current page title from path
+  const getPageTitle = () => {
+    const path = location.pathname;
+    switch (path) {
+      case '/': return 'Dashboard';
+      case '/dashboard': return 'Dashboard';
+      case '/users': return 'User Management';
+      default: return 'Groxo Admin';
+    }
+  };
+
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-        <Route index element={<Navigate to="dashboard" />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="hub-map" element={<HubMap />} />
-        <Route path="users" element={<UserManagement />} />
-        <Route path="orders" element={<OrderManagement />} />
-        <Route path="products" element={<ProductApprovals />} />
-        <Route path="transactions" element={<Transactions />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="support" element={<SupportTickets />} />
-      </Route>
-    </Routes>
+    <div className="d-flex" style={{ minHeight: '100vh' }}>
+      {/* Sidebar */}
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onLogout={handleLogout}
+        currentPath={location.pathname}
+      />
+
+      {/* Main Content */}
+      <div className="flex-grow-1 d-flex flex-column" style={{ marginLeft: sidebarOpen ? '250px' : '0', transition: 'margin-left 0.3s' }}>
+        <Header 
+          title={getPageTitle()}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        />
+        <main className="flex-grow-1 p-4" style={{ backgroundColor: '#f8f9fa' }}>
+          {children}
+        </main>
+      </div>
+    </div>
   );
 };
 
-const App = () => (
-  <BrowserRouter>
-    <AuthProvider>
-      <AppRoutes />
-      <ToastContainer />
-    </AuthProvider>
-  </BrowserRouter>
-);
+// Main App Component
+function App() {
+  return (
+    <>
+      <Routes>
+        {/* Public Route - Login */}
+        <Route path="/login" element={<Login />} />
+
+        {/* Protected Routes with Layout */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <Dashboard />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <Dashboard />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/users" element={
+          <ProtectedRoute>
+            <AppLayout>
+              <UserManagement />
+            </AppLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* Catch All - Redirect to Dashboard */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      {/* Toast Notifications */}
+      <ToastContainer 
+        position="bottom-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="colored"
+      />
+    </>
+  );
+}
 
 export default App;

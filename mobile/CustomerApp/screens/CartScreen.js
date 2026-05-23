@@ -1,42 +1,61 @@
-﻿import React, { useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+﻿import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { useCart } from '../context/CartContext';
-import CartItem from '../components/CartItem';
-import { Colors, Shadows } from '../theme/theme';
-export default function CartScreen({ navigation }) {
-  const { items, updateQuantity, removeFromCart, subtotal, total, discount, applyPromo, clearCart } = useCart();
-  const [code, setCode] = useState('');
-  if (items.length === 0) return <View style={styles.empty}><Text style={styles.emptyText}>Your cart is empty</Text></View>;
+
+const CartScreen = ({ navigation }) => {
+  const { cart, removeFromCart } = useCart();
+
   return (
     <View style={styles.container}>
-      <FlatList data={items} keyExtractor={item => item._id} renderItem={({ item }) => <CartItem item={item} onUpdateQty={updateQuantity} onRemove={removeFromCart} />} contentContainerStyle={{ paddingBottom: 16 }} />
-      <View style={styles.promo}>
-        <TextInput placeholder="Promo code" value={code} onChangeText={setCode} style={styles.promoInput} placeholderTextColor={Colors.gray} />
-        <TouchableOpacity style={styles.applyBtn} onPress={() => applyPromo(code)}><Text style={styles.applyText}>Apply</Text></TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>My Cart</Text>
+        <View style={{ width: 50 }} />
       </View>
-      <View style={styles.breakdown}>
-        <Text style={styles.row}>Subtotal: <Text style={styles.bold}>₹{subtotal.toFixed(2)}</Text></Text>
-        {discount > 0 && <Text style={styles.row}>Discount: <Text style={styles.bold}>-{discount * 100}%</Text></Text>}
-        <Text style={[styles.row, styles.total]}>Total: <Text style={styles.bold}>₹{total.toFixed(2)}</Text></Text>
-      </View>
-      <TouchableOpacity style={styles.checkoutBtn} onPress={() => navigation.navigate('Checkout')}>
-        <Text style={styles.checkoutText}>Proceed to Checkout</Text>
-      </TouchableOpacity>
+      {cart.length === 0 ? (
+        <View style={styles.emptyContent}>
+          <Text style={styles.icon}>🛒</Text>
+          <Text style={styles.message}>Your cart is empty</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={cart}
+          keyExtractor={item => item._id}
+          renderItem={({ item }) => (
+            <View style={styles.cartItem}>
+              <Text style={styles.itemName}>{item.name}</Text>
+              <Text style={styles.itemPrice}>₹{item.price}</Text>
+              <TouchableOpacity onPress={() => removeFromCart(item._id)}>
+                <Text style={styles.removeText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        />
+      )}
     </View>
   );
-}
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, padding: 12 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
-  emptyText: { color: Colors.gray, fontSize: 18 },
-  promo: { flexDirection: 'row', marginVertical: 12 },
-  promoInput: { flex: 1, backgroundColor: Colors.white, borderRadius: 8, paddingHorizontal: 12, marginRight: 8, borderWidth: 1, borderColor: Colors.lightGray },
-  applyBtn: { backgroundColor: Colors.accent, paddingHorizontal: 16, borderRadius: 8, justifyContent: 'center' },
-  applyText: { color: Colors.white, fontWeight: 'bold' },
-  breakdown: { backgroundColor: Colors.white, padding: 16, borderRadius: 12, ...Shadows.light, marginBottom: 12 },
-  row: { fontSize: 14, marginBottom: 4 },
-  bold: { fontWeight: 'bold', color: Colors.black },
-  total: { fontSize: 18, marginTop: 8, borderTopWidth: 1, borderColor: Colors.lightGray, paddingTop: 8 },
-  checkoutBtn: { backgroundColor: Colors.primary, padding: 16, borderRadius: 12, alignItems: 'center', ...Shadows.medium },
-  checkoutText: { color: Colors.white, fontWeight: 'bold', fontSize: 16 },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, backgroundColor: '#fff',
+  },
+  backButton: { fontSize: 16, color: '#2196F3', fontWeight: '600' },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  emptyContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  icon: { fontSize: 64, marginBottom: 20 },
+  message: { fontSize: 18, color: '#999' },
+  cartItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#fff', marginHorizontal: 16, marginVertical: 4, padding: 16, borderRadius: 12,
+  },
+  itemName: { fontSize: 16, fontWeight: '600', color: '#333' },
+  itemPrice: { fontSize: 16, color: '#2196F3', fontWeight: 'bold' },
+  removeText: { color: '#f44336', fontWeight: '600' },
 });
+
+export default CartScreen;

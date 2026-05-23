@@ -1,26 +1,37 @@
-﻿import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import api from '../services/api';
-import ProductCard from '../components/ProductCard';
-import { useCart } from '../context/CartContext';
-import { Colors } from '../theme/theme';
-export default function ProductListScreen({ route, navigation }) {
-  const [products, setProducts] = useState([]);
-  const category = route.params?.category;
-  const { addToCart } = useCart();
-  useEffect(() => {
-    const url = category ? '/products?category=' + category : '/products';
-    api.get(url).then(res => setProducts(res.data.products || [])).catch(console.log);
-  }, [category]);
+﻿import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+
+const ProductListScreen = ({ navigation, route }) => {
+  const category = route?.params?.category || 'All';
+  
   return (
     <View style={styles.container}>
-      <FlatList
-        data={products} keyExtractor={item => item._id}
-        renderItem={({ item }) => <ProductCard product={item} onPress={() => navigation.navigate('ProductDetail', { product: item })} onAddToCart={addToCart} />}
-        numColumns={2}
-        ListEmptyComponent={<Text style={styles.empty}>No products in this category</Text>}
-      />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>{category}</Text>
+        <View style={{ width: 50 }} />
+      </View>
+      <View style={styles.content}>
+        <Text style={styles.icon}>📦</Text>
+        <Text style={styles.message}>{category} products coming soon</Text>
+      </View>
     </View>
   );
-}
-const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: Colors.background, padding: 4 }, empty: { textAlign: 'center', marginTop: 40, color: Colors.gray } });
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, backgroundColor: '#fff',
+  },
+  backButton: { fontSize: 16, color: '#2196F3', fontWeight: '600' },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  icon: { fontSize: 64, marginBottom: 20 },
+  message: { fontSize: 18, color: '#999' },
+});
+
+export default ProductListScreen;

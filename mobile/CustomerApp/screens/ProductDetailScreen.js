@@ -1,41 +1,56 @@
-﻿import React, { useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+﻿import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useCart } from '../context/CartContext';
-import { Colors, Shadows } from '../theme/theme';
-export default function ProductDetailScreen({ route, navigation }) {
-  const { product } = route.params;
-  const [qty, setQty] = useState(1);
+
+const ProductDetailScreen = ({ navigation, route }) => {
+  const product = route?.params?.product;
   const { addToCart } = useCart();
+
+  if (!product) {
+    return (
+      <View style={styles.container}>
+        <Text>Product not found</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
-      <Image source={{ uri: product.image || 'https://via.placeholder.com/300' }} style={styles.image} />
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Product Details</Text>
+        <View style={{ width: 50 }} />
+      </View>
       <View style={styles.content}>
+        <Image source={{ uri: product.image || 'https://via.placeholder.com/200' }} style={styles.image} />
         <Text style={styles.name}>{product.name}</Text>
         <Text style={styles.price}>₹{product.price}</Text>
-        <Text style={styles.desc}>{product.description || 'Fresh and organic'}</Text>
-        <View style={styles.qtyRow}>
-          <TouchableOpacity onPress={() => setQty(Math.max(1, qty - 1))} style={styles.qtyBtn}><Text style={styles.qtyText}>-</Text></TouchableOpacity>
-          <Text style={styles.qty}>{qty}</Text>
-          <TouchableOpacity onPress={() => setQty(qty + 1)} style={styles.qtyBtn}><Text style={styles.qtyText}>+</Text></TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => { addToCart(product, qty); navigation.navigate('CartTab'); }}>
-          <Text style={styles.addBtnText}>Add to Cart – ₹{product.price * qty}</Text>
+        <Text style={styles.description}>{product.description || 'No description'}</Text>
+        <TouchableOpacity style={styles.addButton} onPress={() => addToCart(product)}>
+          <Text style={styles.addButtonText}>Add to Cart</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
-}
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.white },
-  image: { width: '100%', height: 280 },
-  content: { padding: 16 },
-  name: { fontSize: 24, fontWeight: 'bold', color: Colors.black, marginBottom: 4 },
-  price: { fontSize: 22, color: Colors.primary, marginBottom: 8, fontWeight: 'bold' },
-  desc: { color: Colors.gray, marginBottom: 16, lineHeight: 20 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16 },
-  qtyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.lightGray, justifyContent: 'center', alignItems: 'center' },
-  qtyText: { fontSize: 22, color: Colors.black },
-  qty: { fontSize: 20, fontWeight: 'bold' },
-  addBtn: { backgroundColor: Colors.primary, padding: 16, borderRadius: 12, alignItems: 'center', ...Shadows.light },
-  addBtnText: { color: Colors.white, fontWeight: 'bold', fontSize: 16 },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, backgroundColor: '#fff',
+  },
+  backButton: { fontSize: 16, color: '#2196F3', fontWeight: '600' },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  content: { padding: 20, alignItems: 'center' },
+  image: { width: 200, height: 200, borderRadius: 12, marginBottom: 20 },
+  name: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  price: { fontSize: 20, color: '#2196F3', fontWeight: 'bold', marginBottom: 12 },
+  description: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 20 },
+  addButton: { backgroundColor: '#2196F3', padding: 16, borderRadius: 12, width: '100%', alignItems: 'center' },
+  addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
+
+export default ProductDetailScreen;

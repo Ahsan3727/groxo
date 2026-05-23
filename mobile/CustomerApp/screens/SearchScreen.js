@@ -1,37 +1,35 @@
-﻿import React, { useState } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import api from '../services/api';
-import { Colors } from '../theme/theme';
-export default function SearchScreen({ navigation }) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const handleSearch = async () => { if (!query) return; const res = await api.get('/products?search=' + query); setResults(res.data.products || []); };
+﻿import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+
+const SearchScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <TextInput style={styles.input} placeholder="Search for products..." placeholderTextColor={Colors.gray} value={query} onChangeText={setQuery} onSubmitEditing={handleSearch} />
-        <TouchableOpacity onPress={handleSearch}><Text style={styles.icon}>🔍</Text></TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Search Products</Text>
+        <View style={{ width: 50 }} />
       </View>
-      <FlatList
-        data={results} keyExtractor={item => item._id}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.item} onPress={() => navigation.navigate('ProductDetail', { product: item })}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.price}>₹{item.price}</Text>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={<Text style={styles.empty}>No results found</Text>}
-      />
+      <View style={styles.content}>
+        <Text style={styles.icon}>🔍</Text>
+        <Text style={styles.message}>Search for products</Text>
+      </View>
     </View>
   );
-}
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, padding: 12 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: 12, paddingHorizontal: 12, marginBottom: 12, elevation: 2 },
-  input: { flex: 1, paddingVertical: 12, fontSize: 16, color: Colors.black },
-  icon: { fontSize: 20 },
-  item: { backgroundColor: Colors.white, padding: 16, marginBottom: 8, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', elevation: 1 },
-  name: { fontWeight: '600', color: Colors.black },
-  price: { fontWeight: 'bold', color: Colors.primary },
-  empty: { textAlign: 'center', marginTop: 40, color: Colors.gray },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, backgroundColor: '#fff',
+  },
+  backButton: { fontSize: 16, color: '#2196F3', fontWeight: '600' },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  icon: { fontSize: 64, marginBottom: 20 },
+  message: { fontSize: 18, color: '#999' },
 });
+
+export default SearchScreen;

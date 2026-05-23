@@ -1,79 +1,295 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { useWholesaler } from '../context/WholesalerContext';
-import { Colors, Shadows } from '../theme/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function DashboardScreen({ navigation }) {
-  const { wholesaler, logout } = useAuth();
-  const { orders, products, earnings } = useWholesaler();
+const DashboardScreen = ({ navigation }) => {
+  const { wholesaler } = useAuth();
 
-  const newOrders = orders.filter(o => o.status === 'new').length;
-  const pendingProducts = products.filter(p => p.status === 'pending').length;
-  const lowStock = products.filter(p => p.stock < 5).length;
+  const handleLogout = async () => {
+    await AsyncStorage.clear();
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.greeting}>Welcome, {wholesaler?.shopName || 'Shop'}!</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {(wholesaler?.name || 'W').charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <Text style={styles.greeting}>
+          Welcome, {wholesaler?.name?.split(' ')[0] || 'Wholesaler'}!
+        </Text>
+        <Text style={styles.email}>{wholesaler?.email}</Text>
+        {wholesaler?.storeName && (
+          <View style={styles.storeBadge}>
+            <Text style={styles.storeText}>🏪 {wholesaler.storeName}</Text>
+          </View>
+        )}
+        {wholesaler?.businessLicense && (
+          <Text style={styles.licenseText}>License: {wholesaler.businessLicense}</Text>
+        )}
+      </View>
+
+      {/* Stats Cards */}
       <View style={styles.statsRow}>
-        <View style={styles.statCard}><Text style={styles.statValue}>?{earnings.today}</Text><Text>Today</Text></View>
-        <View style={styles.statCard}><Text style={styles.statValue}>?{earnings.week}</Text><Text>This Week</Text></View>
-        <View style={styles.statCard}><Text style={styles.statValue}>?{earnings.month}</Text><Text>This Month</Text></View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>0</Text>
+          <Text style={styles.statLabel}>Products</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>0</Text>
+          <Text style={styles.statLabel}>Orders</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>₹0</Text>
+          <Text style={styles.statLabel}>Revenue</Text>
+        </View>
       </View>
 
-      <View style={styles.alertRow}>
-        {newOrders > 0 && (
-          <TouchableOpacity style={styles.alertCard} onPress={() => navigation.navigate('Orders')}>
-            <Text style={styles.alertText}>?? {newOrders} New Orders</Text>
-          </TouchableOpacity>
-        )}
-        {pendingProducts > 0 && (
-          <TouchableOpacity style={styles.alertCard} onPress={() => navigation.navigate('Products')}>
-            <Text style={styles.alertText}>? {pendingProducts} Pending Products</Text>
-          </TouchableOpacity>
-        )}
-        {lowStock > 0 && (
-          <TouchableOpacity style={styles.alertCard} onPress={() => navigation.navigate('Products')}>
-            <Text style={styles.alertText}>?? {lowStock} Low Stock Items</Text>
-          </TouchableOpacity>
-        )}
+      {/* Account Status */}
+      <View style={styles.statusCard}>
+        <Text style={styles.statusTitle}>Account Status</Text>
+        <View style={[styles.statusBadge, { backgroundColor: wholesaler?.isActive ? '#4CAF50' : '#f44336' }]}>
+          <Text style={styles.statusText}>{wholesaler?.isActive ? 'Active' : 'Inactive'}</Text>
+        </View>
       </View>
 
+      {/* Quick Actions */}
+      <Text style={styles.sectionTitle}>Business Actions</Text>
       <View style={styles.menuGrid}>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
-          <Text>?? Orders</Text>
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Products')}
+        >
+          <Text style={styles.menuIcon}>📦</Text>
+          <Text style={styles.menuText}>My Products</Text>
+          <Text style={styles.menuSubtext}>Manage inventory</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Products')}>
-          <Text>?? Products</Text>
+
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('AddProduct')}
+        >
+          <Text style={styles.menuIcon}>➕</Text>
+          <Text style={styles.menuText}>Add Product</Text>
+          <Text style={styles.menuSubtext}>New listing</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Earnings')}>
-          <Text>?? Earnings</Text>
+
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Orders')}
+        >
+          <Text style={styles.menuIcon}>📋</Text>
+          <Text style={styles.menuText}>Orders</Text>
+          <Text style={styles.menuSubtext}>View orders</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Profile')}>
-          <Text>?? Profile</Text>
+
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Earnings')}
+        >
+          <Text style={styles.menuIcon}>💰</Text>
+          <Text style={styles.menuText}>Earnings</Text>
+          <Text style={styles.menuSubtext}>Revenue report</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Settings')}>
-          <Text>?? Settings</Text>
+
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <Text style={styles.menuIcon}>👤</Text>
+          <Text style={styles.menuText}>Profile</Text>
+          <Text style={styles.menuSubtext}>Edit details</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Settings')}
+        >
+          <Text style={styles.menuIcon}>⚙️</Text>
+          <Text style={styles.menuText}>Settings</Text>
+          <Text style={styles.menuSubtext}>Preferences</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-        <Text style={styles.logoutText}>Logout</Text>
+      {/* Logout Button */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutText}>🚪 Logout</Text>
       </TouchableOpacity>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
-}
+};
+
 const styles = StyleSheet.create({
-  container: { flex:1, padding:16, backgroundColor:Colors.background },
-  greeting: { fontSize:22, fontWeight:'bold', marginBottom:16 },
-  statsRow: { flexDirection:'row', justifyContent:'space-between', marginBottom:16 },
-  statCard: { flex:1, backgroundColor:Colors.white, padding:12, marginHorizontal:4, borderRadius:8, alignItems:'center', ...Shadows.light },
-  statValue: { fontSize:20, fontWeight:'bold', color:Colors.primary },
-  alertRow: { marginBottom:16 },
-  alertCard: { backgroundColor:Colors.white, padding:14, borderRadius:8, marginBottom:8, borderLeftWidth:4, borderLeftColor:Colors.accent, ...Shadows.light },
-  alertText: { fontWeight:'bold' },
-  menuGrid: { flexDirection:'row', flexWrap:'wrap', justifyContent:'space-between', marginBottom:16 },
-  menuItem: { width:'48%', backgroundColor:Colors.white, padding:16, borderRadius:8, alignItems:'center', marginBottom:12, ...Shadows.light },
-  logoutBtn: { marginTop:10, backgroundColor:Colors.error, padding:14, borderRadius:8, alignItems:'center' },
-  logoutText: { color:Colors.white, fontWeight:'bold' }
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  header: {
+    backgroundColor: '#FF9800',
+    padding: 30,
+    paddingTop: 60,
+    alignItems: 'center',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    marginBottom: 20,
+  },
+  avatar: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatarText: {
+    color: '#FF9800',
+    fontSize: 30,
+    fontWeight: 'bold',
+  },
+  greeting: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  email: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  storeBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 10,
+  },
+  storeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  licenseText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    marginHorizontal: 4,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#FF9800',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
+  },
+  statusCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  statusBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  statusText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#333',
+    marginLeft: 20,
+    marginBottom: 12,
+  },
+  menuGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+  },
+  menuItem: {
+    width: '46%',
+    backgroundColor: '#fff',
+    margin: '2%',
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  menuIcon: {
+    fontSize: 36,
+    marginBottom: 8,
+  },
+  menuText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  menuSubtext: {
+    fontSize: 11,
+    color: '#999',
+  },
+  logoutButton: {
+    backgroundColor: '#f44336',
+    marginHorizontal: 16,
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  logoutText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });
+
+export default DashboardScreen;

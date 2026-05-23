@@ -1,28 +1,33 @@
 ﻿const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('../config/environment');
 const User = require('../models/User');
 
-const authenticate = async (req, res, next) => {
+exports.protect = async (req, res, next) => {
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({ message: 'Not authorized, no token' });
+  }
+
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Access denied. No token provided.' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Attach user to request (excluding password)
-    const user = await User.findById(decoded.id).select('-password');
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid token. User not found.' });
-    }
-
-    req.user = user;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = await User.findById(decoded.id).select('-password');
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token.' });
+    res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
 
-module.exports = authenticate;
+exports.protectAdmin = async (req, res, next) => {
+  await exports.protect(req, res, async () => {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access only' });
+    }
+    next();
+  });
+};

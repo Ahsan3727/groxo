@@ -1,106 +1,105 @@
 ﻿const User = require('../models/User');
-const Order = require('../models/Order');
-const Product = require('../models/Product');
+const generateToken = require('../utils/generateToken');
 
-exports.dashboard = async (req, res) => {
-  try {
-    const todayOrders = await Order.countDocuments({ createdAt: { $gte: new Date().setHours(0,0,0,0) } });
-    const revenue = await Order.aggregate([
-      { $match: { status: 'delivered', createdAt: { $gte: new Date().setHours(0,0,0,0) } } },
-      { $group: { _id: null, total: { $sum: '$total' } } }
-    ]);
-    const activeRiders = await User.countDocuments({ role: 'rider', isActive: true });
-    const pendingOrders = await Order.countDocuments({ status: 'pending' });
-    const chartData = await Order.aggregate([
-      { $match: { status: 'delivered' } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, revenue: { $sum: '$total' } } },
-      { $sort: { _id: 1 } },
-      { $limit: 7 },
-      { $project: { date: '$_id', revenue: 1, _id: 0 } }
-    ]);
-    res.json({ stats: { todayOrders, revenue: revenue[0]?.total || 0, activeRiders, pendingOrders }, chartData });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.getUsers = async (req, res) => {
-  try {
-    const { role } = req.query;
-    const filter = role ? { role } : {};
-    const users = await User.find(filter).select('-password');
-    res.json({ users });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.updateUser = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { action } = req.body;
-    const isActive = action === 'unban';
-    const user = await User.findByIdAndUpdate(userId, { isActive }, { new: true });
-    res.json({ user });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.getOrders = async (req, res) => {
-  try {
-    const { status } = req.query;
-    const filter = status ? { status } : {};
-    const orders = await Order.find(filter).populate('customer', 'name phone').sort('-createdAt');
-    res.json({ orders });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.updateOrder = async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { status } = req.body;
-    const order = await Order.findByIdAndUpdate(orderId, { status }, { new: true });
-    res.json({ order });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.getPendingProducts = async (req, res) => {
-  try {
-    const products = await Product.find({ status: 'pending' }).populate('wholesaler', 'name');
-    res.json({ products });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.approveProduct = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const { action } = req.body;
-    const status = action === 'approve' ? 'approved' : 'rejected';
-    const product = await Product.findByIdAndUpdate(productId, { status }, { new: true });
-    res.json({ product });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-
-exports.getTransactions = (req, res) => res.json({ transactions: [] });
-exports.handleWithdrawal = (req, res) => res.json({ success: true });
-exports.salesReport = async (req, res) => {
-  try {
-    const data = await Order.aggregate([
-      { $match: { status: 'delivered' } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, revenue: { $sum: '$total' } } },
-      { $sort: { _id: 1 } },
-      { $project: { period: '$_id', revenue: 1, _id: 0 } }
-    ]);
-    res.json({ data });
-  } catch (err) { res.status(500).json({ message: err.message }); }
-};
-exports.riderPerformance = (req, res) => res.json({ data: [] });
-exports.updateGeneralSettings = (req, res) => res.json({ success: true });
-exports.updateCommission = (req, res) => res.json({ success: true });
-exports.getTickets = (req, res) => res.json({ tickets: [] });
-exports.resolveTicket = (req, res) => res.json({ success: true });
-
-exports.login = (req, res) => {
+// Admin login
+exports.login = async (req, res) => {
   const { email, password } = req.body;
-  if (email === 'admin@groxo.com' && password === 'admin123') {
-    res.json({ token: 'dummy-admin-jwt-token', admin: { name: 'Super Admin', role: 'admin' } });
+  const admin = await User.findOne({ email, role: 'admin' });
+  if (admin && (await admin.comparePassword(password))) {
+    res.json({
+      _id: admin._id, name: admin.name, email: admin.email, role: admin.role,
+      token: generateToken(admin._id)
+    });
   } else {
     res.status(401).json({ message: 'Invalid credentials' });
   }
 };
-exports.me = (req, res) => res.json({ admin: { name: 'Super Admin', role: 'admin' } });
+
+// Get current admin
+exports.me = async (req, res) => {
+  const admin = await User.findById(req.admin._id).select('-password');
+  res.json(admin);
+};
+
+// Dashboard stats
+exports.dashboard = async (req, res) => {
+  // Add your own stats logic or a placeholder
+  res.json({ message: 'Dashboard data' });
+};
+
+// Get all users with optional role filter
+exports.getUsers = async (req, res) => {
+  try {
+    const { role } = req.query;
+    const filter = role ? { role } : {};
+    const users = await User.find(filter).select('-password').sort('-createdAt');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Create a new user (any role)
+exports.createUser = async (req, res) => {
+  try {
+    const { name, email, phone, password, role, address, vehicle, storeName, businessLicense } = req.body;
+
+    const exists = await User.findOne({ $or: [{ email }, { phone }] });
+    if (exists) return res.status(400).json({ message: 'User already exists' });
+
+    const userData = { name, email, phone, password, role: role || 'customer' };
+    if (role === 'customer' && address) userData.address = address;
+    if (role === 'rider' && vehicle) userData.vehicle = vehicle;
+    if (role === 'wholesaler') {
+      if (storeName) userData.storeName = storeName;
+      if (businessLicense) userData.businessLicense = businessLicense;
+    }
+
+    const user = await User.create(userData);
+    const response = user.toObject();
+    delete response.password;
+    res.status(201).json(response);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Update user
+exports.updateUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { name, email, phone, role, isActive, address, vehicle, storeName, businessLicense } = req.body;
+
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (phone) user.phone = phone;
+    if (role) user.role = role;
+    if (isActive !== undefined) user.isActive = isActive;
+
+    if (role === 'customer' && address) user.address = address;
+    if (role === 'rider' && vehicle) user.vehicle = vehicle;
+    if (role === 'wholesaler') {
+      if (storeName !== undefined) user.storeName = storeName;
+      if (businessLicense !== undefined) user.businessLicense = businessLicense;
+    }
+
+    const updated = await user.save();
+    const response = updated.toObject();
+    delete response.password;
+    res.json(response);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Delete user
+exports.deleteUser = async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: 'User removed' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

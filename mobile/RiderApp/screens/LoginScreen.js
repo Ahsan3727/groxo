@@ -1,58 +1,256 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { Colors } from '../theme/theme';
 
-export default function LoginScreen() {
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState('phone');
-  const [loading, setLoading] = useState(false);
+const LoginScreen = ({ navigation }) => {
   const { login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loginMethod, setLoginMethod] = useState('email'); // 'email' or 'phone'
 
-  const handleSendOTP = () => setStep('otp');
-
-  const handleVerifyOTP = async () => {
-    setLoading(true);
-    try {
-      await login(phone, otp);
-    } catch (e) {
-      Alert.alert('Login failed', e.response?.data?.message || e.message);
-    } finally {
-      setLoading(false);
+  const handleLogin = async () => {
+    // Validation
+    if (loginMethod === 'email' && !email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
     }
+    if (loginMethod === 'phone' && !phone.trim()) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return;
+    }
+    if (!password.trim()) {
+      Alert.alert('Error', 'Please enter your password');
+      return;
+    }
+
+    setLoading(true);
+    const result = await login(
+      loginMethod === 'email' ? email.trim() : '',
+      loginMethod === 'phone' ? phone.trim() : '',
+      password
+    );
+    setLoading(false);
+
+    if (!result.success) {
+      Alert.alert('Login Failed', result.message);
+    }
+    // If success, AuthContext will update and navigation will happen automatically
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🏍️ Groxo Rider</Text>
-      {step === 'phone' ? (
-        <>
-          <TextInput style={styles.input} placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-          <TouchableOpacity style={styles.btn} onPress={handleSendOTP}>
-            <Text style={styles.btnText}>Send OTP</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <TextInput style={styles.input} placeholder="Enter OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" />
-          {loading ? <ActivityIndicator size="large" color={Colors.primary} /> : (
-            <TouchableOpacity style={styles.btn} onPress={handleVerifyOTP}>
-              <Text style={styles.btnText}>Verify OTP</Text>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Text style={styles.appName}>🛵 Groxo Rider</Text>
+          <Text style={styles.subtitle}>Login to your account</Text>
+        </View>
+
+        <View style={styles.form}>
+          {/* Login Method Toggle */}
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[styles.toggleButton, loginMethod === 'email' && styles.toggleActive]}
+              onPress={() => setLoginMethod('email')}
+            >
+              <Text style={[styles.toggleText, loginMethod === 'email' && styles.toggleTextActive]}>
+                Email
+              </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, loginMethod === 'phone' && styles.toggleActive]}
+              onPress={() => setLoginMethod('phone')}
+            >
+              <Text style={[styles.toggleText, loginMethod === 'phone' && styles.toggleTextActive]}>
+                Phone
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Email Input */}
+          {loginMethod === 'email' && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="rider@example.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
           )}
-          <TouchableOpacity onPress={() => setStep('phone')}>
-            <Text style={{ marginTop: 10, color: Colors.accent }}>Change number</Text>
+
+          {/* Phone Input */}
+          {loginMethod === 'phone' && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="+1234567890"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+            </View>
+          )}
+
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </View>
+
+          {/* Login Button */}
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Login</Text>
+            )}
           </TouchableOpacity>
-        </>
-      )}
-    </View>
+
+          {/* Signup Link */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.link}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
-}
+};
+
 const styles = StyleSheet.create({
-  container: { flex:1, justifyContent:'center', alignItems:'center', padding:20, backgroundColor:Colors.background },
-  title: { fontSize:28, fontWeight:'bold', marginBottom:30 },
-  input: { width:'100%', backgroundColor:Colors.white, padding:14, borderRadius:8, marginBottom:12, borderWidth:1, borderColor:Colors.lightGray },
-  btn: { backgroundColor:Colors.primary, padding:14, borderRadius:8, width:'100%', alignItems:'center' },
-  btnText: { color:Colors.white, fontWeight:'bold', fontSize:16 }
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  appName: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+  form: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  toggleActive: {
+    backgroundColor: '#4CAF50',
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  toggleTextActive: {
+    color: '#fff',
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 14,
+    fontSize: 16,
+    backgroundColor: '#fafafa',
+  },
+  button: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  link: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: 'bold',
+  },
 });
+
+export default LoginScreen;
