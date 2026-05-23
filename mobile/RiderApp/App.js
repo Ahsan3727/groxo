@@ -10,6 +10,8 @@ import OrderHistoryScreen from './screens/OrderHistoryScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { ActivityIndicator, View } from 'react-native';
+import MapScreen from './screens/MapScreen';
+import 'leaflet/dist/leaflet.css';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +30,7 @@ const AppNavigator = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
         <>
+        <Stack.Screen name="Map" component={MapScreen} />
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
                     <Stack.Screen name="EarningsHistory" component={EarningsHistoryScreen} />
           <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />

@@ -1,18 +1,30 @@
 ﻿const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
+const User = require('../models/User');
 
-router.get('/dashboard', protect, async (req, res) => {
+// PUT /api/rider/location
+router.put('/location', protect, async (req, res) => {
   if (req.user.role !== 'rider') {
     return res.status(403).json({ message: 'Rider access only' });
   }
-  res.json({
-    todayEarnings: 0,
-    weekEarnings: 0,
-    monthEarnings: 0,
-    totalDeliveries: 0,
-    rating: 5.0
-  });
+
+  const { lat, lng } = req.body;
+  if (!lat || !lng) {
+    return res.status(400).json({ message: 'lat and lng are required' });
+  }
+
+  try {
+    const rider = await User.findById(req.user._id);
+    rider.currentLocation = { type: 'Point', coordinates: [lng, lat] };
+    rider.lastLocationUpdate = new Date();
+    await rider.save();
+
+    res.json({ message: 'Location updated' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
+
 
 module.exports = router;

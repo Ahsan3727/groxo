@@ -1,11 +1,21 @@
 import React from 'react';
 import { Nav } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
-const Sidebar = ({ isOpen, onToggle, onLogout, currentPath }) => {
+const Sidebar = ({ isOpen, onToggle, onLogout }) => {
+  const location = useLocation();
+  const currentPath = location.pathname;
+
   const menuItems = [
     { path: '/dashboard', icon: '📊', label: 'Dashboard' },
     { path: '/users', icon: '👥', label: 'User Management' },
+    { path: '/map', icon: '📍', label: 'Hub Map' },
+    { path: '/orders', icon: '📦', label: 'Orders' },
+    { path: '/products', icon: '🛍️', label: 'Products' },
+    { path: '/transactions', icon: '💰', label: 'Transactions' },
+    { path: '/reports', icon: '📈', label: 'Reports' },
+    { path: '/settings', icon: '⚙️', label: 'Settings' },
+    { path: '/tickets', icon: '🎫', label: 'Support Tickets' },
   ];
 
   if (!isOpen) return null;
@@ -18,7 +28,8 @@ const Sidebar = ({ isOpen, onToggle, onLogout, currentPath }) => {
         top: 0, 
         left: 0, 
         overflowY: 'auto',
-        zIndex: 1000 
+        zIndex: 1000,
+        transition: 'transform 0.3s ease',
       }}
     >
       {/* Brand */}
@@ -34,11 +45,37 @@ const Sidebar = ({ isOpen, onToggle, onLogout, currentPath }) => {
             key={item.path}
             as={Link}
             to={item.path}
-            className={`text-white mb-1 rounded ${currentPath === item.path ? 'bg-primary' : ''}`}
-            style={{ padding: '10px 15px' }}
+            className={`text-white mb-1 rounded ${
+              currentPath === item.path || currentPath.startsWith(item.path + '/') 
+                ? 'bg-primary' 
+                : ''
+            }`}
+            style={{ 
+              padding: '10px 15px', 
+              transition: 'all 0.2s',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => {
+              if (currentPath !== item.path && !currentPath.startsWith(item.path + '/')) {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentPath !== item.path && !currentPath.startsWith(item.path + '/')) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
+            }}
           >
             <span className="me-2">{item.icon}</span>
             {item.label}
+            {currentPath === item.path && (
+              <span 
+                className="ms-auto" 
+                style={{ fontSize: '8px', color: '#fff' }}
+              >
+                ●
+              </span>
+            )}
           </Nav.Link>
         ))}
       </Nav>

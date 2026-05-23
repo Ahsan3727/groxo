@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
+import useLocationTracking from '../hooks/useLocationTracking';
 import {
   View,
   Text,
@@ -28,7 +29,7 @@ const Colors = {
 
 export default function DashboardScreen({ navigation }) {
   const { rider, logout } = useAuth();
-  
+  useLocationTracking(true);
   // Local state
   const [isOnline, setIsOnline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -218,6 +219,14 @@ export default function DashboardScreen({ navigation }) {
           <Text style={styles.menuText}>Earnings</Text>
           <Text style={styles.menuSubtext}>View history</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+  style={styles.menuItem}
+  onPress={() => navigation.navigate('Map')}
+>
+  <Text style={styles.menuIcon}>🗺️</Text>
+  <Text style={styles.menuText}>My Map</Text>
+  <Text style={styles.menuSubtext}>View location</Text>
+</TouchableOpacity>
 
         <TouchableOpacity
           style={styles.menuItem}

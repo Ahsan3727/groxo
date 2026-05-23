@@ -8,10 +8,11 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import useLocationTracking from '../hooks/useLocationTracking';
 
 const HomeScreen = ({ navigation }) => {
   const { customer } = useAuth();
-
+useLocationTracking(true);
   const handleLogout = async () => {
     await AsyncStorage.clear();
     if (typeof window !== 'undefined') {
@@ -65,6 +66,14 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.menuText}>Shop Now</Text>
           <Text style={styles.menuSubtext}>Browse products</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+  style={styles.menuItem}
+  onPress={() => navigation.navigate('Map')}
+>
+  <Text style={styles.menuIcon}>🗺️</Text>
+  <Text style={styles.menuText}>My Map</Text>
+  <Text style={styles.menuSubtext}>View location</Text>
+</TouchableOpacity>
 
         <TouchableOpacity
           style={styles.menuItem}

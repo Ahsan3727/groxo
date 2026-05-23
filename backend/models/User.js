@@ -26,7 +26,12 @@ const userSchema = new mongoose.Schema({
   businessLicense: String,
   storeAddress: String,
   isActive: { type: Boolean, default: true },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  currentLocation: {
+    type: { type: String, default: 'Point' },
+    coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
+  },
+  lastLocationUpdate: Date,
 });
 
 userSchema.pre('save', async function(next) {
