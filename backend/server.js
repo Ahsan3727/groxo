@@ -5,6 +5,25 @@ dotenv.config();
 const connectDB = require('./config/db');
 
 const app = express();
+const http = require('http');
+const socketIo = require('socket.io');
+const server = http.createServer(app);
+const io = socketIo(server, { cors: { origin: '*' } });
+
+// Make io accessible in routes
+app.set('io', io);
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+
+  // Join the user to a private room based on their userId (from client query)
+  const userId = socket.handshake.query.userId;
+  if (userId) {
+    socket.join(userId);
+    console.log(`User ${userId} joined their room`);
+  }
+
+  socket.on('disconnect', () => console.log('Socket disconnected'));
+});
 
 // ---- CORS: Allow all origins for development ----
 app.use(cors());
@@ -25,4 +44,4 @@ app.use('/api/admin', require('./routes/adminRoutes'));
 app.get('/', (req, res) => res.json({ message: 'Groxo API is running' }));
 app.get('/api/rider/dashboard', (req, res) => res.json({ test: true }));
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -3,7 +3,7 @@
 const productSchema = new mongoose.Schema({
   wholesaler: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   name: { type: String, required: true },
-  description: String,
+  description: { type: String },
   price: { type: Number, required: true },
   category: String,
   images: [String],
@@ -11,7 +11,11 @@ const productSchema = new mongoose.Schema({
   isApproved: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
   lowStockThreshold: { type: Number, default: 5 },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  isApproved: { type: Boolean, default: false },
+adminPrice: { type: Number },               // final price set by admin
+wholesalerPrice: { type: Number },           // cost price from wholesaler
+status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
 });
 
 module.exports = mongoose.model('Product', productSchema);

@@ -12,6 +12,9 @@ import SettingsScreen from './screens/SettingsScreen';
 import { ActivityIndicator, View } from 'react-native';
 import MapScreen from './screens/MapScreen';
 import 'leaflet/dist/leaflet.css';
+import OrderAssignedScreen from './screens/OrderAssignedScreen';
+import WaitingScreen from './screens/WaitingScreen';
+import { ActiveOrderProvider } from './context/ActiveOrderContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -30,6 +33,8 @@ const AppNavigator = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
         <>
+        <Stack.Screen name="OrderAssigned" component={OrderAssignedScreen} />
+        <Stack.Screen name="Waiting" component={WaitingScreen} />
         <Stack.Screen name="Map" component={MapScreen} />
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
                     <Stack.Screen name="EarningsHistory" component={EarningsHistoryScreen} />
@@ -51,9 +56,11 @@ const AppNavigator = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>
+      <ActiveOrderProvider>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </ActiveOrderProvider>
     </AuthProvider>
   );
 }

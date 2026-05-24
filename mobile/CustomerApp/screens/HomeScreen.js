@@ -1,190 +1,218 @@
-﻿import React from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  FlatList,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   ScrollView,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import api from '../services/api';
+import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import useLocationTracking from '../hooks/useLocationTracking';
+import ProductCard from '../components/ProductCard';
+import { Colors, Shadows, Fonts } from '../theme/theme';
+
+const banners = [
+  'https://via.placeholder.com/350x150/FF9800/fff?text=30%25+Off+Fruits',
+  'https://via.placeholder.com/350x150/4CAF50/fff?text=Free+Delivery',
+];
+const categories = ['Fruits', 'Vegetables', 'Dairy', 'Bakery', 'Beverages'];
 
 const HomeScreen = ({ navigation }) => {
+  const [products, setProducts] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const { addToCart } = useCart();
   const { customer } = useAuth();
-useLocationTracking(true);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const { data } = await api.get('/products');
+      // data is { products: [...] } from our backend
+      setProducts(data.products || []);
+    } catch (error) {
+      console.log('Failed to fetch products', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = search
+    ? products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+    : products;
+
+  const getDisplayPrice = (product) => {
+    return product.adminPrice || product.price;
+  };
+
   const handleLogout = async () => {
     await AsyncStorage.clear();
     if (typeof window !== 'undefined') {
       window.location.reload();
     } else {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     }
   };
 
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text>Loading products...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(customer?.name || 'C').charAt(0).toUpperCase()}
-          </Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Dashboard')}>
+          <Text style={styles.menuIcon}>☰</Text>
+        </TouchableOpacity>
+        <View style={styles.searchBox}>
+          <TextInput
+            placeholder="Search products..."
+            placeholderTextColor={Colors.gray}
+            value={search}
+            onChangeText={setSearch}
+            style={styles.searchInput}
+          />
+          <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+            <Text style={styles.searchIcon}>🔍</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.greeting}>
-          Welcome, {customer?.name?.split(' ')[0] || 'Customer'}!
+        <TouchableOpacity onPress={() => navigation.navigate('Cart')}>
+          <Text style={styles.cartIcon}>🛒</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* User Greeting */}
+      <View style={styles.greetingBar}>
+        <Text style={styles.greetingText}>
+          Hi, {customer?.name?.split(' ')[0] || 'Customer'}! 👋
         </Text>
-        <Text style={styles.email}>{customer?.email}</Text>
-        {customer?.address && (
-          <View style={styles.addressBadge}>
-            <Text style={styles.addressText}>
-              📍 {customer.address.city || customer.address.street || 'Address added'}
-            </Text>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.logoutLink}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Banners */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bannerRow}>
+          {banners.map((url, i) => (
+            <Image key={i} source={{ uri: url }} style={styles.banner} />
+          ))}
+        </ScrollView>
+
+        {/* Categories */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
+          {categories.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={styles.chip}
+              onPress={() => navigation.navigate('ProductList', { category: cat })}
+            >
+              <Text style={styles.chipText}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Products */}
+        <Text style={styles.sectionTitle}>Products</Text>
+        {filtered.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No products found</Text>
           </View>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={item => item._id}
+            renderItem={({ item }) => (
+              <ProductCard
+                product={item}
+                onPress={() => navigation.navigate('ProductDetail', { product: item })}
+                onAddToCart={addToCart}
+                displayPrice={getDisplayPrice(item)}
+              />
+            )}
+            numColumns={2}
+            scrollEnabled={false}
+          />
         )}
-      </View>
-
-      {/* Account Status */}
-      <View style={styles.statusCard}>
-        <Text style={styles.statusTitle}>Account Status</Text>
-        <View style={[styles.statusBadge, { backgroundColor: customer?.isActive ? '#4CAF50' : '#f44336' }]}>
-          <Text style={styles.statusText}>{customer?.isActive ? 'Active' : 'Inactive'}</Text>
-        </View>
-      </View>
-
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.menuGrid}>
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Home')}
-        >
-          <Text style={styles.menuIcon}>🛍️</Text>
-          <Text style={styles.menuText}>Shop Now</Text>
-          <Text style={styles.menuSubtext}>Browse products</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-  style={styles.menuItem}
-  onPress={() => navigation.navigate('Map')}
->
-  <Text style={styles.menuIcon}>🗺️</Text>
-  <Text style={styles.menuText}>My Map</Text>
-  <Text style={styles.menuSubtext}>View location</Text>
-</TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Cart')}
-        >
-          <Text style={styles.menuIcon}>🛒</Text>
-          <Text style={styles.menuText}>My Cart</Text>
-          <Text style={styles.menuSubtext}>View items</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Search')}
-        >
-          <Text style={styles.menuIcon}>🔍</Text>
-          <Text style={styles.menuText}>Search</Text>
-          <Text style={styles.menuSubtext}>Find products</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.menuIcon}>👤</Text>
-          <Text style={styles.menuText}>Profile</Text>
-          <Text style={styles.menuSubtext}>Edit details</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>🚪 Logout</Text>
-      </TouchableOpacity>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: Colors.background },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    backgroundColor: '#2196F3',
-    padding: 30,
-    paddingTop: 60,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    marginBottom: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingTop: 50,
+    backgroundColor: Colors.white,
+    ...Shadows.medium,
+    marginBottom: 2,
   },
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
+  menuIcon: { fontSize: 24, marginRight: 8 },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    marginHorizontal: 8,
   },
-  avatarText: { color: '#2196F3', fontSize: 30, fontWeight: 'bold' },
-  greeting: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  email: { color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 4 },
-  addressBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 10,
-  },
-  addressText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  statusCard: {
+  searchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: Colors.black },
+  searchIcon: { fontSize: 18 },
+  cartIcon: { fontSize: 24, marginLeft: 8 },
+  greetingBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: Colors.white,
+    marginBottom: 4,
   },
-  statusTitle: { fontSize: 16, fontWeight: '600', color: '#333' },
-  statusBadge: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  statusText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  greetingText: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  logoutLink: { fontSize: 13, color: '#f44336', fontWeight: '600' },
+  bannerRow: { marginVertical: 12 },
+  banner: { width: 320, height: 140, borderRadius: 12, marginRight: 10 },
+  categoryRow: { marginBottom: 12, paddingHorizontal: 4 },
+  chip: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 10,
+    ...Shadows.light,
+  },
+  chipText: { fontWeight: '600', color: Colors.black },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: Fonts.title,
     fontWeight: 'bold',
-    color: '#333',
-    marginLeft: 20,
-    marginBottom: 12,
+    marginLeft: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    color: Colors.black,
   },
-  menuGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12 },
-  menuItem: {
-    width: '46%',
-    backgroundColor: '#fff',
-    margin: '2%',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  menuIcon: { fontSize: 36, marginBottom: 8 },
-  menuText: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 2 },
-  menuSubtext: { fontSize: 11, color: '#999' },
-  logoutButton: {
-    backgroundColor: '#f44336',
-    marginHorizontal: 16,
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  logoutText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  emptyState: { padding: 40, alignItems: 'center' },
+  emptyText: { fontSize: 16, color: Colors.gray },
 });
 
 export default HomeScreen;

@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import useLocationTracking from '../hooks/useLocationTracking';
 import {
   View,
   Text,
@@ -10,9 +9,11 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useActiveOrder } from '../context/ActiveOrderContext';   // ✅ NEW
 import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import useLocationTracking from '../hooks/useLocationTracking';
 
 // Theme constants (no external dependencies)
 const Colors = {
@@ -29,9 +30,15 @@ const Colors = {
 
 export default function DashboardScreen({ navigation }) {
   const { rider, logout } = useAuth();
+  const {
+    isOnline, goOnline, goOffline,         // ✅ from ActiveOrderContext
+    activeOrder,                            // ✅
+    fetchAvailableOrders                    // ✅
+  } = useActiveOrder();
+
   useLocationTracking(true);
+
   // Local state
-  const [isOnline, setIsOnline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({
@@ -67,31 +74,30 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
-  // Pull-to-refresh
+  // Pull-to-refresh (also refreshes available orders)   ✅ MODIFIED
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchDashboardData();
+    await fetchAvailableOrders();    // ✅ NEW
     setRefreshing(false);
-  }, []);
+  }, [fetchAvailableOrders]);        // ✅ dependency added
 
-  // Toggle online/offline status
+  // Toggle online/offline status   ✅ now uses context
   const toggleOnline = () => {
-    setIsOnline(prev => !prev);
+    if (isOnline) goOffline();
+    else goOnline();
   };
 
-  // Logout with confirmation
+  // Logout with confirmation   (your exact code, untouched)
   const handleLogout = async () => {
-  // Clear everything
-  await AsyncStorage.clear();
-  
-  // Force reload - this ALWAYS works
-  if (typeof window !== 'undefined') {
-    window.location.reload();
-  } else {
-    // For native, just navigate
-    navigation.navigate('Login');
-  }
-};
+    await AsyncStorage.clear();
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    } else {
+      navigation.navigate('Login');
+    }
+  };
+
   // Navigate to screens (with fallback if screen doesn't exist)
   const navigateTo = (screenName) => {
     try {
@@ -103,19 +109,19 @@ export default function DashboardScreen({ navigation }) {
 
   // Get first name from full name
   const firstName = rider?.name?.split(' ')[0] || 'Rider';
-  
+
   // Get vehicle info
-  const vehicleInfo = rider?.vehicle 
+  const vehicleInfo = rider?.vehicle
     ? `${rider.vehicle.type || 'Vehicle'} • ${rider.vehicle.plateNumber || 'N/A'}`
     : 'No vehicle registered';
 
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       refreshControl={
-        <RefreshControl 
-          refreshing={refreshing} 
+        <RefreshControl
+          refreshing={refreshing}
           onRefresh={onRefresh}
           colors={[Colors.primary]}
           tintColor={Colors.primary}
@@ -191,6 +197,38 @@ export default function DashboardScreen({ navigation }) {
         </View>
       </TouchableOpacity>
 
+      {/* ========== NEW: ORDER ACTIONS ========== */}
+      {isOnline && !activeOrder && (
+        <TouchableOpacity
+          style={styles.orderActionBtn}
+          onPress={() => navigation.navigate('Waiting')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.orderActionIcon}>🔍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.orderActionTitle}>Find Available Orders</Text>
+            <Text style={styles.orderActionSubtitle}>View and accept new delivery requests</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {activeOrder && (
+        <TouchableOpacity
+          style={[styles.orderActionBtn, { backgroundColor: Colors.accent }]}
+          onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.orderActionIcon}>📦</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.orderActionTitle}>Continue Current Order</Text>
+            <Text style={styles.orderActionSubtitle}>
+              Status: {activeOrder.status?.replace(/_/g, ' ')}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+      {/* ========== END ORDER ACTIONS ========== */}
+
       {/* Account Status */}
       <View style={styles.statusCard}>
         <View style={styles.statusContent}>
@@ -219,14 +257,15 @@ export default function DashboardScreen({ navigation }) {
           <Text style={styles.menuText}>Earnings</Text>
           <Text style={styles.menuSubtext}>View history</Text>
         </TouchableOpacity>
+
         <TouchableOpacity
-  style={styles.menuItem}
-  onPress={() => navigation.navigate('Map')}
->
-  <Text style={styles.menuIcon}>🗺️</Text>
-  <Text style={styles.menuText}>My Map</Text>
-  <Text style={styles.menuSubtext}>View location</Text>
-</TouchableOpacity>
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Map')}
+        >
+          <Text style={styles.menuIcon}>🗺️</Text>
+          <Text style={styles.menuText}>My Map</Text>
+          <Text style={styles.menuSubtext}>View location</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.menuItem}
@@ -260,8 +299,8 @@ export default function DashboardScreen({ navigation }) {
       </View>
 
       {/* Logout Button */}
-      <TouchableOpacity 
-        style={styles.logoutButton} 
+      <TouchableOpacity
+        style={styles.logoutButton}
         onPress={handleLogout}
         activeOpacity={0.8}
       >
@@ -282,7 +321,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 20,
   },
-  
+
   // Header
   header: {
     backgroundColor: Colors.white,
@@ -419,6 +458,31 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   toggleSubtitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    marginTop: 2,
+  },
+
+  // Order action buttons  ✅ NEW STYLES
+  orderActionBtn: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  orderActionIcon: {
+    fontSize: 32,
+    marginRight: 14,
+  },
+  orderActionTitle: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  orderActionSubtitle: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 13,
     marginTop: 2,

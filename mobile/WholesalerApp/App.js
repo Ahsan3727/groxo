@@ -8,6 +8,9 @@ import DashboardScreen from './screens/DashboardScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import { ActivityIndicator, View } from 'react-native';
 import MapScreen from './screens/MapScreen';
+import OrdersScreen from './screens/OrdersScreen';
+import MyProductsScreen from './screens/MyProductsScreen';
+import AddProductScreen from './screens/AddProductScreen';
 const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
@@ -31,6 +34,9 @@ const AppNavigator = () => {
       ) : (
         <>
         <Stack.Screen name="Map" component={MapScreen} />
+        <Stack.Screen name="Orders" component={OrdersScreen} />
+        <Stack.Screen name="Products" component={MyProductsScreen} />
+<Stack.Screen name="AddProduct" component={AddProductScreen} />
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
         </>
