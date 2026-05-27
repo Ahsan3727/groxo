@@ -1,581 +1,130 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  RefreshControl,
-} from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Alert } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { useActiveOrder } from '../context/ActiveOrderContext';   // ✅ NEW
-import { CommonActions } from '@react-navigation/native';
+import { useActiveOrder } from '../context/ActiveOrderContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 import useLocationTracking from '../hooks/useLocationTracking';
-
-// Theme constants (no external dependencies)
-const Colors = {
-  primary: '#4CAF50',
-  accent: '#FF9800',
-  error: '#f44336',
-  white: '#ffffff',
-  gray: '#999999',
-  lightGray: '#f5f5f5',
-  text: '#333333',
-  online: '#4CAF50',
-  offline: '#9E9E9E',
-};
+import AppButton from '../components/AppButton';
+import Card from '../components/Card';
+import ToggleSwitch from '../components/ToggleSwitch';
+import OrderStatusBadge from '../components/OrderStatusBadge';
+import { Colors, Fonts, Radius, Shadows } from '../../shared/theme';
 
 export default function DashboardScreen({ navigation }) {
   const { rider, logout } = useAuth();
-  const {
-    isOnline, goOnline, goOffline,         // ✅ from ActiveOrderContext
-    activeOrder,                            // ✅
-    fetchAvailableOrders                    // ✅
-  } = useActiveOrder();
-
+  const { isOnline, goOnline, goOffline, activeOrder, fetchAvailableOrders, availableOrders } = useActiveOrder();
   useLocationTracking(true);
-
-  // Local state
+  const [stats, setStats] = useState({ today: 0, week: 0, month: 0, deliveries: 0, rating: 5.0, acceptance: 94 });
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({
-    todayEarnings: 0,
-    weekEarnings: 0,
-    monthEarnings: 0,
-    totalDeliveries: 0,
-    rating: 5.0,
-  });
 
-  // Fetch dashboard data on mount
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const { data } = await api.get('/rider/dashboard');
-      if (data) {
-        setStats({
-          todayEarnings: data.todayEarnings || 0,
-          weekEarnings: data.weekEarnings || 0,
-          monthEarnings: data.monthEarnings || 0,
-          totalDeliveries: data.totalDeliveries || 0,
-          rating: data.rating || 5.0,
-        });
-      }
-    } catch (error) {
-      console.log('Dashboard API not available, using defaults');
-    } finally {
-      setLoading(false);
-    }
+  const fetchStats = async () => {
+    try { const { data } = await api.get('/rider/dashboard'); if (data) setStats(prev => ({ ...prev, today: data.todayEarnings || 0, week: data.weekEarnings || 0, month: data.monthEarnings || 0, deliveries: data.totalDeliveries || 0, rating: data.rating || 5.0 })); } catch (e) { }
   };
 
-  // Pull-to-refresh (also refreshes available orders)   ✅ MODIFIED
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchDashboardData();
-    await fetchAvailableOrders();    // ✅ NEW
-    setRefreshing(false);
-  }, [fetchAvailableOrders]);        // ✅ dependency added
+  useEffect(() => { fetchStats(); }, []);
 
-  // Toggle online/offline status   ✅ now uses context
-  const toggleOnline = () => {
-    if (isOnline) goOffline();
-    else goOnline();
-  };
+  const onRefresh = async () => { setRefreshing(true); await fetchStats(); await fetchAvailableOrders(); setRefreshing(false); };
 
-  // Logout with confirmation   (your exact code, untouched)
+  const toggleOnline = () => { if (isOnline) goOffline(); else goOnline(); };
+
   const handleLogout = async () => {
-    await AsyncStorage.clear();
-    if (typeof window !== 'undefined') {
-      window.location.reload();
-    } else {
-      navigation.navigate('Login');
-    }
+    Alert.alert('Logout', 'Are you sure?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Logout', style: 'destructive', onPress: async () => { await AsyncStorage.clear(); if (typeof window !== 'undefined') window.location.reload(); else navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } }]);
   };
-
-  // Navigate to screens (with fallback if screen doesn't exist)
-  const navigateTo = (screenName) => {
-    try {
-      navigation.navigate(screenName);
-    } catch (error) {
-      Alert.alert('Coming Soon', `${screenName} screen will be available soon.`);
-    }
-  };
-
-  // Get first name from full name
-  const firstName = rider?.name?.split(' ')[0] || 'Rider';
-
-  // Get vehicle info
-  const vehicleInfo = rider?.vehicle
-    ? `${rider.vehicle.type || 'Vehicle'} • ${rider.vehicle.plateNumber || 'N/A'}`
-    : 'No vehicle registered';
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={[Colors.primary]}
-          tintColor={Colors.primary}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Profile Header */}
+    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(rider?.name || 'R').charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.headerInfo}>
-            <Text style={styles.greeting}>Welcome, {firstName}!</Text>
-            <Text style={styles.email}>{rider?.email || 'No email'}</Text>
-            <View style={styles.vehicleBadge}>
-              <Text style={styles.vehicleText}>🛵 {vehicleInfo}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{(rider?.name || 'R')[0].toUpperCase()}</Text></View>
+          <View>
+            <Text style={styles.greeting}>Hello, {rider?.name?.split(' ')[0] || 'Rider'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ color: Colors.amber, fontSize: 12 }}>⭐ {stats.rating}</Text>
+              <Text style={{ color: Colors.gray400, fontSize: 12 }}>· {stats.deliveries} deliveries</Text>
             </View>
           </View>
         </View>
-      </View>
-
-      {/* Stats Cards */}
-      <View style={styles.statsSection}>
-        <View style={styles.statCard}>
-          <Text style={styles.statIcon}>💰</Text>
-          <Text style={styles.statValue}>₹{stats.todayEarnings}</Text>
-          <Text style={styles.statLabel}>Today</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statIcon}>📅</Text>
-          <Text style={styles.statValue}>₹{stats.weekEarnings}</Text>
-          <Text style={styles.statLabel}>This Week</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statIcon}>📊</Text>
-          <Text style={styles.statValue}>₹{stats.monthEarnings}</Text>
-          <Text style={styles.statLabel}>This Month</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: isOnline ? Colors.primary600 : Colors.gray400 }}>{isOnline ? 'Online' : 'Offline'}</Text>
+          <ToggleSwitch value={isOnline} onToggle={toggleOnline} />
         </View>
       </View>
 
-      {/* Additional Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={styles.statsCardSmall}>
-          <Text style={styles.statsSmallValue}>{stats.totalDeliveries}</Text>
-          <Text style={styles.statsSmallLabel}>Deliveries</Text>
-        </View>
-        <View style={styles.statsCardSmall}>
-          <Text style={styles.statsSmallValue}>⭐ {stats.rating}</Text>
-          <Text style={styles.statsSmallLabel}>Rating</Text>
-        </View>
+      <View style={styles.statsGrid}>
+        <View style={[styles.statCard, { backgroundColor: Colors.primary50 }]}><Text style={styles.statIcon}>💰</Text><Text style={styles.statValue}>${stats.today.toFixed(2)}</Text><Text style={styles.statLabel}>Today</Text></View>
+        <View style={[styles.statCard, { backgroundColor: Colors.blue50 }]}><Text style={styles.statIcon}>📦</Text><Text style={styles.statValue}>{stats.deliveries}</Text><Text style={styles.statLabel}>Completed</Text></View>
+        <View style={[styles.statCard, { backgroundColor: Colors.amber50 }]}><Text style={styles.statIcon}>⏱️</Text><Text style={styles.statValue}>22 min</Text><Text style={styles.statLabel}>Avg Time</Text></View>
+        <View style={[styles.statCard, { backgroundColor: Colors.purple50 }]}><Text style={styles.statIcon}>🎯</Text><Text style={styles.statValue}>{stats.acceptance}%</Text><Text style={styles.statLabel}>Acceptance</Text></View>
       </View>
 
-      {/* Online/Offline Toggle */}
-      <TouchableOpacity
-        style={[styles.toggleButton, isOnline ? styles.toggleOnline : styles.toggleOffline]}
-        onPress={toggleOnline}
-        activeOpacity={0.8}
-      >
-        <View style={styles.toggleContent}>
-          <Text style={styles.toggleIcon}>{isOnline ? '🟢' : '🔴'}</Text>
-          <View>
-            <Text style={styles.toggleTitle}>
-              {isOnline ? 'You are Online' : 'You are Offline'}
-            </Text>
-            <Text style={styles.toggleSubtitle}>
-              {isOnline ? 'Receiving order requests' : 'Tap to go online'}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-
-      {/* ========== NEW: ORDER ACTIONS ========== */}
-      {isOnline && !activeOrder && (
-        <TouchableOpacity
-          style={styles.orderActionBtn}
-          onPress={() => navigation.navigate('Waiting')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.orderActionIcon}>🔍</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.orderActionTitle}>Find Available Orders</Text>
-            <Text style={styles.orderActionSubtitle}>View and accept new delivery requests</Text>
-          </View>
-        </TouchableOpacity>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 2 }}>
+        <Text style={{ fontSize: Fonts.sizes.lg, ...Fonts.bold, color: Colors.gray900 }}>🆕 Available Orders</Text>
+        <Text style={{ color: Colors.primary600, fontWeight: '600', fontSize: 13 }} onPress={() => navigation.navigate('Waiting')}>View all →</Text>
+      </View>
+      {availableOrders.length === 0 ? (
+        <Card style={{ alignItems: 'center', padding: 30 }}>
+          <Text style={{ fontSize: 40, opacity: 0.6 }}>📭</Text>
+          <Text style={{ fontSize: Fonts.sizes.md, color: Colors.gray600, marginTop: 8 }}>No orders nearby</Text>
+          <Text style={{ fontSize: Fonts.sizes.sm, color: Colors.gray400, marginTop: 4 }}>New orders will appear here</Text>
+        </Card>
+      ) : (
+        availableOrders.slice(0, 3).map(order => (
+          <Card key={order._id} onPress={() => navigation.navigate('OrderAssigned', { order })} accent={Colors.primary600}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '700' }}>#{order._id.slice(-6)}</Text>
+              <OrderStatusBadge status={order.status} />
+            </View>
+            <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 4 }}>📍 {order.pickup?.split(',')[0] || order.wholesaler?.storeName}</Text>
+            <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 8 }}>🏠 {order.dropoff?.split(',')[0] || order.deliveryAddress?.street}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontWeight: '700', color: Colors.primary600 }}>${order.payment?.amount?.toFixed(2)}</Text>
+              <AppButton title="Accept" size="sm" onPress={() => navigation.navigate('OrderAssigned', { order })} />
+            </View>
+          </Card>
+        ))
       )}
 
       {activeOrder && (
-        <TouchableOpacity
-          style={[styles.orderActionBtn, { backgroundColor: Colors.accent }]}
-          onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.orderActionIcon}>📦</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.orderActionTitle}>Continue Current Order</Text>
-            <Text style={styles.orderActionSubtitle}>
-              Status: {activeOrder.status?.replace(/_/g, ' ')}
-            </Text>
+        <Card accent={Colors.amber} onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })} style={{ marginTop: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontWeight: '700' }}>#{activeOrder._id.slice(-6)}</Text>
+            <OrderStatusBadge status={activeOrder.status} />
           </View>
-        </TouchableOpacity>
+          <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 4 }}>📍 Pickup: {activeOrder.wholesaler?.storeName || 'Store'}</Text>
+          <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 8 }}>🏠 Dropoff: {activeOrder.deliveryAddress?.street}</Text>
+          <AppButton title="Continue Current Order" onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })} />
+        </Card>
       )}
-      {/* ========== END ORDER ACTIONS ========== */}
 
-      {/* Account Status */}
-      <View style={styles.statusCard}>
-        <View style={styles.statusContent}>
-          <Text style={styles.statusIcon}>📋</Text>
-          <Text style={styles.statusTitle}>Account Status</Text>
-        </View>
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: rider?.isActive ? Colors.primary : Colors.error }
-        ]}>
-          <Text style={styles.statusText}>
-            {rider?.isActive ? 'Active' : 'Inactive'}
-          </Text>
-        </View>
+      <Text style={{ fontSize: Fonts.sizes.lg, ...Fonts.bold, marginVertical: 16, marginLeft: 2 }}>Quick Actions</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+        {['Earnings', 'Orders', 'Profile', 'Settings', 'Map'].map((screen, idx) => {
+          const icons = ['📈', '📜', '👤', '⚙️', '🗺️'];
+          const routes = ['EarningsHistory', 'OrderHistory', 'Profile', 'Settings', 'Map'];
+          return (
+            <Card key={screen} style={{ flex: 1, minWidth: '45%', alignItems: 'center', padding: 16 }} onPress={() => navigation.navigate(routes[idx])}>
+              <Text style={{ fontSize: 28, marginBottom: 6 }}>{icons[idx]}</Text>
+              <Text style={{ fontWeight: '600', color: Colors.gray800 }}>{screen}</Text>
+            </Card>
+          );
+        })}
       </View>
 
-      {/* Quick Actions Grid */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.menuGrid}>
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigateTo('EarningsHistory')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.menuIcon}>📈</Text>
-          <Text style={styles.menuText}>Earnings</Text>
-          <Text style={styles.menuSubtext}>View history</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Map')}
-        >
-          <Text style={styles.menuIcon}>🗺️</Text>
-          <Text style={styles.menuText}>My Map</Text>
-          <Text style={styles.menuSubtext}>View location</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigateTo('OrderHistory')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.menuIcon}>📜</Text>
-          <Text style={styles.menuText}>Orders</Text>
-          <Text style={styles.menuSubtext}>All deliveries</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigateTo('Profile')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.menuIcon}>👤</Text>
-          <Text style={styles.menuText}>Profile</Text>
-          <Text style={styles.menuSubtext}>Edit details</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigateTo('Settings')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.menuIcon}>⚙️</Text>
-          <Text style={styles.menuText}>Settings</Text>
-          <Text style={styles.menuSubtext}>Preferences</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Logout Button */}
-      <TouchableOpacity
-        style={styles.logoutButton}
-        onPress={handleLogout}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.logoutText}>🚪 Logout</Text>
-      </TouchableOpacity>
-
-      {/* Bottom spacer */}
-      <View style={styles.bottomSpacer} />
+      <AppButton title="🚪 Logout" type="outline" style={{ borderColor: '#fecaca', color: Colors.red }} textStyle={{ color: Colors.red }} onPress={handleLogout} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.lightGray,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-
-  // Header
-  header: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    marginBottom: 16,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  avatarText: {
-    color: Colors.white,
-    fontSize: 26,
-    fontWeight: 'bold',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  email: {
-    fontSize: 13,
-    color: Colors.gray,
-    marginBottom: 8,
-  },
-  vehicleBadge: {
-    backgroundColor: Colors.lightGray,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-  },
-  vehicleText: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-
-  // Stats
-  statsSection: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    marginHorizontal: 4,
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  statIcon: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: Colors.gray,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  statsCardSmall: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    marginHorizontal: 4,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  statsSmallValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  statsSmallLabel: {
-    fontSize: 11,
-    color: Colors.gray,
-  },
-
-  // Toggle
-  toggleButton: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 18,
-    borderRadius: 16,
-  },
-  toggleOnline: {
-    backgroundColor: Colors.online,
-  },
-  toggleOffline: {
-    backgroundColor: Colors.offline,
-  },
-  toggleContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  toggleIcon: {
-    fontSize: 32,
-    marginRight: 14,
-  },
-  toggleTitle: {
-    color: Colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  toggleSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-
-  // Order action buttons  ✅ NEW STYLES
-  orderActionBtn: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  orderActionIcon: {
-    fontSize: 32,
-    marginRight: 14,
-  },
-  orderActionTitle: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  orderActionSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-
-  // Status
-  statusCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  statusContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  statusBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  statusText: {
-    color: Colors.white,
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-
-  // Menu
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginLeft: 20,
-    marginBottom: 12,
-  },
-  menuGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-  },
-  menuItem: {
-    width: '46%',
-    backgroundColor: Colors.white,
-    margin: '2%',
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  menuIcon: {
-    fontSize: 36,
-    marginBottom: 10,
-  },
-  menuText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  menuSubtext: {
-    fontSize: 11,
-    color: Colors.gray,
-  },
-
-  // Logout
-  logoutButton: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: Colors.error,
-    padding: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  logoutText: {
-    color: Colors.white,
-    fontWeight: 'bold',
-    fontSize: 17,
-  },
-
-  // Bottom spacer
-  bottomSpacer: {
-    height: 40,
-  },
+  container: { flex: 1, backgroundColor: Colors.gray100, paddingHorizontal: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 50, paddingBottom: 16, paddingHorizontal: 4 },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: Colors.primary600, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  greeting: { fontSize: Fonts.sizes.lg, ...Fonts.bold, color: Colors.gray900 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
+  statCard: { flex: 1, minWidth: '45%', borderRadius: Radius.lg, padding: 14, alignItems: 'flex-start' },
+  statIcon: { fontSize: 18, marginBottom: 4 },
+  statValue: { fontSize: Fonts.sizes.lg, ...Fonts.bold, color: Colors.gray900 },
+  statLabel: { fontSize: Fonts.sizes.xs, color: Colors.gray400 },
 });

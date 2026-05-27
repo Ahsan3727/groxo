@@ -28,6 +28,15 @@ export default function OrdersScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backBtn}>← Back</Text>
         </TouchableOpacity>
+        {/* After the status line */}
+{item.status === 'out_for_delivery' && (
+  <TouchableOpacity
+    style={styles.trackBtn}
+    onPress={() => navigation.navigate('TrackOrder', { order: item })}
+  >
+    <Text style={styles.trackBtnText}>📍 Track Order</Text>
+  </TouchableOpacity>
+)}
         <Text style={styles.title}>My Orders</Text>
         <View style={{ width: 50 }} />
       </View>
@@ -58,4 +67,15 @@ const styles = StyleSheet.create({
   amount: { fontWeight: '600', marginTop: 4 },
   date: { color: '#999', fontSize: 12, marginTop: 4 },
   empty: { textAlign: 'center', marginTop: 40, color: '#999' },
+  trackBtn: {
+  backgroundColor: '#2196F3',
+  marginTop: 8,
+  paddingVertical: 8,
+  borderRadius: 6,
+  alignItems: 'center',
+},
+trackBtnText: {
+  color: '#fff',
+  fontWeight: 'bold',
+},
 });

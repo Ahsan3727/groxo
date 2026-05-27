@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   phone: { type: String, required: true, unique: true },
   password: { type: String, required: true, minlength: 6 },
+  expoPushToken: { type: String },
   role: {
     type: String,
     enum: ['customer', 'rider', 'wholesaler', 'admin'],

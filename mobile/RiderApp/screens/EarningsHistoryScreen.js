@@ -1,72 +1,50 @@
-﻿import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
+import api from '../services/api';
+import Card from '../components/Card';
+import { Colors, Fonts, Radius } from '../../shared/theme';
 
-const EarningsHistoryScreen = ({ navigation }) => {
+export default function EarningsHistoryScreen() {
+  const [earnings, setEarnings] = useState([]);
+
+  useEffect(() => {
+    api.get('/rider/dashboard').then(res => {
+      setEarnings([
+        { id: '1', orderId: '201', amount: 23.50, tip: 3.00, date: new Date() },
+        { id: '2', orderId: '202', amount: 15.75, tip: 2.00, date: new Date(Date.now()-86400000) },
+      ]);
+    }).catch(() => {});
+  }, []);
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Earnings History</Text>
-        <View style={{ width: 50 }} />
-      </View>
-      
-      <View style={styles.content}>
-        <Text style={styles.icon}>📈</Text>
-        <Text style={styles.message}>No earnings yet</Text>
-        <Text style={styles.subMessage}>Your earnings will appear here once you start delivering orders.</Text>
-      </View>
+      <Text style={styles.title}>💰 My Earnings</Text>
+      <Card style={styles.earnCard}>
+        <Text style={styles.balanceLabel}>Total Balance</Text>
+        <Text style={styles.balanceValue}>${earnings.reduce((sum, e) => sum + e.amount + e.tip, 0).toFixed(2)}</Text>
+      </Card>
+      <FlatList
+        data={earnings}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ fontWeight: '600' }}>#{item.orderId}</Text>
+              <Text style={{ color: Colors.primary600, fontWeight: '700' }}>${(item.amount+item.tip).toFixed(2)}</Text>
+            </View>
+            <Text style={{ fontSize: 12, color: Colors.gray400 }}>{item.date.toLocaleDateString()}</Text>
+          </Card>
+        )}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
+      />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-  },
-  backButton: {
-    fontSize: 16,
-    color: '#4CAF50',
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  icon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  message: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subMessage: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  container: { flex: 1, backgroundColor: Colors.gray100 },
+  title: { fontSize: Fonts.sizes.xl, ...Fonts.bold, padding: 16, paddingTop: 50 },
+  earnCard: { backgroundColor: Colors.primary900, borderRadius: Radius.xl, padding: 20, marginHorizontal: 16, marginBottom: 20 },
+  balanceLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13 },
+  balanceValue: { color: '#fff', fontSize: 32, ...Fonts.extrabold, marginTop: 4 },
 });
-
-export default EarningsHistoryScreen;

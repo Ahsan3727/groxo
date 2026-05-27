@@ -1,6 +1,7 @@
 ﻿const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
+const sendPushNotification = require('../utils/sendPushNotification');
 const emitOrderUpdate = (req, order) => {
   const io = req.app.get('io');
   if (io) {
@@ -169,7 +170,35 @@ exports.updateOrderStatus = async (req, res) => {
   try {
     const { status, note, riderLocation } = req.body;
     const order = await Order.findById(req.params.id);
-    
+    // Notify customer of status change
+if (order.customer) {
+  sendPushNotification(
+    order.customer,
+    'Order Update',
+    `Your order is now ${status.replace(/_/g, ' ')}`,
+    { orderId: order._id.toString(), status }
+  );
+}
+
+// Notify rider when assigned (when status becomes 'confirmed')
+if (status === 'confirmed' && order.rider) {
+  sendPushNotification(
+    order.rider,
+    'New Delivery',
+    'You have been assigned a new order!',
+    { orderId: order._id.toString() }
+  );
+}
+
+// Notify wholesaler when order is placed (status 'pending')
+if (status === 'pending' && order.wholesaler) {
+  sendPushNotification(
+    order.wholesaler,
+    'New Order',
+    'A new order is waiting for you!',
+    { orderId: order._id.toString() }
+  );
+}
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     // Validate status transition

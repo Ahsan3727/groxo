@@ -1,72 +1,41 @@
-﻿import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
+import api from '../services/api';
+import Card from '../components/Card';
+import OrderStatusBadge from '../components/OrderStatusBadge';
+import { Colors, Fonts } from '../../shared/theme';
 
-const OrderHistoryScreen = ({ navigation }) => {
+export default function OrderHistoryScreen() {
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    api.get('/orders').then(res => setOrders(res.data || [])).catch(() => {});
+  }, []);
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Order History</Text>
-        <View style={{ width: 50 }} />
-      </View>
-      
-      <View style={styles.content}>
-        <Text style={styles.icon}>📜</Text>
-        <Text style={styles.message}>No orders yet</Text>
-        <Text style={styles.subMessage}>Your completed deliveries will appear here.</Text>
-      </View>
+      <Text style={styles.title}>📜 My Orders</Text>
+      <FlatList
+        data={orders}
+        keyExtractor={item => item._id}
+        renderItem={({ item }) => (
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ fontWeight: '600' }}>#{item._id.slice(-6)}</Text>
+              <OrderStatusBadge status={item.status} />
+            </View>
+            <Text style={{ fontSize: 13, color: Colors.gray600 }}>Customer: {item.customer?.name}</Text>
+            <Text style={{ fontSize: 13, color: Colors.gray600 }}>Amount: ${item.payment?.amount?.toFixed(2)}</Text>
+          </Card>
+        )}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 40, color: Colors.gray400 }}>No orders yet</Text>}
+      />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-  },
-  backButton: {
-    fontSize: 16,
-    color: '#4CAF50',
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  icon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  message: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subMessage: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  container: { flex: 1, backgroundColor: Colors.gray100 },
+  title: { fontSize: Fonts.sizes.xl, ...Fonts.bold, padding: 16, paddingTop: 50 },
 });
-
-export default OrderHistoryScreen;

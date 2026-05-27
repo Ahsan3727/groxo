@@ -1,87 +1,65 @@
-﻿import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { useActiveOrder } from '../context/ActiveOrderContext';   // ✅ correct import
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
+import { useActiveOrder } from '../context/ActiveOrderContext';
+import AppButton from '../components/AppButton';
+import Card from '../components/Card';
+import OrderStatusBadge from '../components/OrderStatusBadge';
+import { Colors, Fonts } from '../../shared/theme';
 
 export default function WaitingScreen({ navigation }) {
-  const { availableOrders, fetchAvailableOrders, acceptOrder, rejectOrder } = useActiveOrder();  // ✅ correct hook
+  const { availableOrders, fetchAvailableOrders, acceptOrder } = useActiveOrder();
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchAvailableOrders();
-  }, []);
+  useEffect(() => { fetchAvailableOrders(); }, []);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchAvailableOrders();
-    setRefreshing(false);
-  };
+  const onRefresh = async () => { setRefreshing(true); await fetchAvailableOrders(); setRefreshing(false); };
 
   const handleAccept = async (orderId) => {
     try {
       const order = await acceptOrder(orderId);
-      Alert.alert('Accepted', 'Order accepted!', [
-        { text: 'OK', onPress: () => navigation.navigate('OrderAssigned', { order }) }
-      ]);
-    } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not accept order');
-    }
+      Alert.alert('Accepted', 'Order accepted!', [{ text: 'OK', onPress: () => navigation.navigate('OrderAssigned', { order }) }]);
+    } catch (err) { Alert.alert('Error', err.response?.data?.message || 'Could not accept'); }
   };
+
+  const renderItem = ({ item }) => (
+    <Card onPress={() => handleAccept(item._id)}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+        <Text style={{ fontWeight: '700' }}>#{item._id.slice(-6)}</Text>
+        <OrderStatusBadge status={item.status} />
+      </View>
+      <Text style={styles.pickup}>📍 {item.pickup?.split(',')[0] || item.wholesaler?.storeName}</Text>
+      <Text style={styles.dropoff}>🏠 {item.dropoff?.split(',')[0] || item.deliveryAddress?.street}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontWeight: '700', color: Colors.primary600 }}>${item.payment?.amount?.toFixed(2)}</Text>
+        <AppButton title="Accept" size="sm" onPress={() => handleAccept(item._id)} />
+      </View>
+    </Card>
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-  onPress={() => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate('Dashboard');
-    }
-  }}
->
-  <Text style={styles.backBtn}>← Back</Text>
-</TouchableOpacity>
+        <AppButton title="← Back" type="ghost" size="sm" onPress={() => navigation.goBack()} />
         <Text style={styles.title}>Available Orders</Text>
-        <View style={{ width: 50 }} />
+        <View style={{ width: 40 }} />
       </View>
       <FlatList
         data={availableOrders}
         keyExtractor={item => item._id}
+        renderItem={renderItem}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        ListEmptyComponent={<Text style={styles.empty}>No orders available</Text>}
-        renderItem={({ item }) => (
-          <View style={styles.orderCard}>
-            <Text style={styles.orderId}>Order #{item._id?.slice(-6)}</Text>
-            <Text>Customer: {item.customer?.name}</Text>
-            <Text>Amount: ₹{item.payment?.amount}</Text>
-            <Text>From: {item.wholesaler?.storeName || item.wholesaler?.name}</Text>
-            <View style={styles.actions}>
-              <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(item._id)}>
-                <Text style={styles.btnText}>Accept</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.rejectBtn} onPress={() => rejectOrder(item._id)}>
-                <Text style={styles.btnText}>Reject</Text>
-              </TouchableOpacity>
-              
-            </View>
-          </View>
-        )}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 40 }}><Text style={{ fontSize: 40 }}>📭</Text><Text style={{ color: Colors.gray400, marginTop: 8 }}>No available orders</Text></View>}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 50, backgroundColor: '#fff' },
-  backBtn: { fontSize: 16, color: '#4CAF50' },
-  title: { fontSize: 18, fontWeight: 'bold' },
-  empty: { textAlign: 'center', marginTop: 50, color: '#999' },
-  orderCard: { backgroundColor: '#fff', margin: 10, padding: 15, borderRadius: 10, elevation: 2 },
-  orderId: { fontWeight: 'bold', marginBottom: 5 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
-  acceptBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 6, marginRight: 10 },
-  rejectBtn: { backgroundColor: '#f44336', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 6 },
-  btnText: { color: '#fff', fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: Colors.gray100 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 50, paddingHorizontal: 8, paddingBottom: 10 },
+  title: { fontSize: Fonts.sizes.xl, ...Fonts.bold },
+  pickup: { fontSize: 13, color: Colors.gray600, marginBottom: 4 },
+  dropoff: { fontSize: 13, color: Colors.gray600, marginBottom: 8 },
 });
