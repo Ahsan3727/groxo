@@ -9,7 +9,8 @@ import AppButton from '../components/AppButton';
 import Card from '../components/Card';
 import ToggleSwitch from '../components/ToggleSwitch';
 import OrderStatusBadge from '../components/OrderStatusBadge';
-import { Colors, Fonts, Radius, Shadows } from '../../shared/theme';
+import BottomTabBar from '../components/BottomTabBar';
+import { Colors, Fonts, Shadows, Radius } from '../theme';
 
 export default function DashboardScreen({ navigation }) {
   const { rider, logout } = useAuth();
@@ -33,91 +34,91 @@ export default function DashboardScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{(rider?.name || 'R')[0].toUpperCase()}</Text></View>
-          <View>
-            <Text style={styles.greeting}>Hello, {rider?.name?.split(' ')[0] || 'Rider'}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: Colors.amber, fontSize: 12 }}>⭐ {stats.rating}</Text>
-              <Text style={{ color: Colors.gray400, fontSize: 12 }}>· {stats.deliveries} deliveries</Text>
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: 100 }} // space for bottom tab bar
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{(rider?.name || 'R')[0].toUpperCase()}</Text></View>
+            <View>
+              <Text style={styles.greeting}>Hello, {rider?.name?.split(' ')[0] || 'Rider'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ color: Colors.amber, fontSize: 12 }}>⭐ {stats.rating}</Text>
+                <Text style={{ color: Colors.gray400, fontSize: 12 }}>· {stats.deliveries} deliveries</Text>
+              </View>
             </View>
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: isOnline ? Colors.primary600 : Colors.gray400 }}>{isOnline ? 'Online' : 'Offline'}</Text>
+            <ToggleSwitch value={isOnline} onToggle={toggleOnline} />
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: isOnline ? Colors.primary600 : Colors.gray400 }}>{isOnline ? 'Online' : 'Offline'}</Text>
-          <ToggleSwitch value={isOnline} onToggle={toggleOnline} />
+
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <View style={[styles.statCard, { backgroundColor: Colors.primary50 }]}><Text style={styles.statIcon}>💰</Text><Text style={styles.statValue}>${stats.today.toFixed(2)}</Text><Text style={styles.statLabel}>Today</Text></View>
+          <View style={[styles.statCard, { backgroundColor: Colors.blue50 }]}><Text style={styles.statIcon}>📦</Text><Text style={styles.statValue}>{stats.deliveries}</Text><Text style={styles.statLabel}>Completed</Text></View>
+          <View style={[styles.statCard, { backgroundColor: Colors.amber50 }]}><Text style={styles.statIcon}>⏱️</Text><Text style={styles.statValue}>22 min</Text><Text style={styles.statLabel}>Avg Time</Text></View>
+          <View style={[styles.statCard, { backgroundColor: Colors.purple50 }]}><Text style={styles.statIcon}>🎯</Text><Text style={styles.statValue}>{stats.acceptance}%</Text><Text style={styles.statLabel}>Acceptance</Text></View>
         </View>
-      </View>
 
-      <View style={styles.statsGrid}>
-        <View style={[styles.statCard, { backgroundColor: Colors.primary50 }]}><Text style={styles.statIcon}>💰</Text><Text style={styles.statValue}>${stats.today.toFixed(2)}</Text><Text style={styles.statLabel}>Today</Text></View>
-        <View style={[styles.statCard, { backgroundColor: Colors.blue50 }]}><Text style={styles.statIcon}>📦</Text><Text style={styles.statValue}>{stats.deliveries}</Text><Text style={styles.statLabel}>Completed</Text></View>
-        <View style={[styles.statCard, { backgroundColor: Colors.amber50 }]}><Text style={styles.statIcon}>⏱️</Text><Text style={styles.statValue}>22 min</Text><Text style={styles.statLabel}>Avg Time</Text></View>
-        <View style={[styles.statCard, { backgroundColor: Colors.purple50 }]}><Text style={styles.statIcon}>🎯</Text><Text style={styles.statValue}>{stats.acceptance}%</Text><Text style={styles.statLabel}>Acceptance</Text></View>
-      </View>
-
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 2 }}>
-        <Text style={{ fontSize: Fonts.sizes.lg, ...Fonts.bold, color: Colors.gray900 }}>🆕 Available Orders</Text>
-        <Text style={{ color: Colors.primary600, fontWeight: '600', fontSize: 13 }} onPress={() => navigation.navigate('Waiting')}>View all →</Text>
-      </View>
-      {availableOrders.length === 0 ? (
-        <Card style={{ alignItems: 'center', padding: 30 }}>
-          <Text style={{ fontSize: 40, opacity: 0.6 }}>📭</Text>
-          <Text style={{ fontSize: Fonts.sizes.md, color: Colors.gray600, marginTop: 8 }}>No orders nearby</Text>
-          <Text style={{ fontSize: Fonts.sizes.sm, color: Colors.gray400, marginTop: 4 }}>New orders will appear here</Text>
-        </Card>
-      ) : (
-        availableOrders.slice(0, 3).map(order => (
-          <Card key={order._id} onPress={() => navigation.navigate('OrderAssigned', { order })} accent={Colors.primary600}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ fontWeight: '700' }}>#{order._id.slice(-6)}</Text>
-              <OrderStatusBadge status={order.status} />
-            </View>
-            <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 4 }}>📍 {order.pickup?.split(',')[0] || order.wholesaler?.storeName}</Text>
-            <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 8 }}>🏠 {order.dropoff?.split(',')[0] || order.deliveryAddress?.street}</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontWeight: '700', color: Colors.primary600 }}>${order.payment?.amount?.toFixed(2)}</Text>
-              <AppButton title="Accept" size="sm" onPress={() => navigation.navigate('OrderAssigned', { order })} />
-            </View>
+        {/* Available Orders */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 2 }}>
+          <Text style={{ fontSize: Fonts.sizes.lg, ...Fonts.bold, color: Colors.gray900 }}>🆕 Available Orders</Text>
+          <Text style={{ color: Colors.primary600, fontWeight: '600', fontSize: 13 }} onPress={() => navigation.navigate('Waiting')}>View all →</Text>
+        </View>
+        {availableOrders.length === 0 ? (
+          <Card style={{ alignItems: 'center', padding: 30 }}>
+            <Text style={{ fontSize: 40, opacity: 0.6 }}>📭</Text>
+            <Text style={{ fontSize: Fonts.sizes.md, color: Colors.gray600, marginTop: 8 }}>No orders nearby</Text>
+            <Text style={{ fontSize: Fonts.sizes.sm, color: Colors.gray400, marginTop: 4 }}>New orders will appear here</Text>
           </Card>
-        ))
-      )}
-
-      {activeOrder && (
-        <Card accent={Colors.amber} onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })} style={{ marginTop: 12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-            <Text style={{ fontWeight: '700' }}>#{activeOrder._id.slice(-6)}</Text>
-            <OrderStatusBadge status={activeOrder.status} />
-          </View>
-          <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 4 }}>📍 Pickup: {activeOrder.wholesaler?.storeName || 'Store'}</Text>
-          <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 8 }}>🏠 Dropoff: {activeOrder.deliveryAddress?.street}</Text>
-          <AppButton title="Continue Current Order" onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })} />
-        </Card>
-      )}
-
-      <Text style={{ fontSize: Fonts.sizes.lg, ...Fonts.bold, marginVertical: 16, marginLeft: 2 }}>Quick Actions</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
-        {['Earnings', 'Orders', 'Profile', 'Settings', 'Map'].map((screen, idx) => {
-          const icons = ['📈', '📜', '👤', '⚙️', '🗺️'];
-          const routes = ['EarningsHistory', 'OrderHistory', 'Profile', 'Settings', 'Map'];
-          return (
-            <Card key={screen} style={{ flex: 1, minWidth: '45%', alignItems: 'center', padding: 16 }} onPress={() => navigation.navigate(routes[idx])}>
-              <Text style={{ fontSize: 28, marginBottom: 6 }}>{icons[idx]}</Text>
-              <Text style={{ fontWeight: '600', color: Colors.gray800 }}>{screen}</Text>
+        ) : (
+          availableOrders.slice(0, 3).map(order => (
+            <Card key={order._id} onPress={() => navigation.navigate('OrderAssigned', { order })} accent={Colors.primary600}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontWeight: '700' }}>#{order._id.slice(-6)}</Text>
+                <OrderStatusBadge status={order.status} />
+              </View>
+              <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 4 }}>📍 {order.pickup?.split(',')[0] || order.wholesaler?.storeName}</Text>
+              <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 8 }}>🏠 {order.dropoff?.split(',')[0] || order.deliveryAddress?.street}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontWeight: '700', color: Colors.primary600 }}>${order.payment?.amount?.toFixed(2)}</Text>
+                <AppButton title="Accept" size="sm" onPress={() => navigation.navigate('OrderAssigned', { order })} />
+              </View>
             </Card>
-          );
-        })}
-      </View>
+          ))
+        )}
 
-      <AppButton title="🚪 Logout" type="outline" style={{ borderColor: '#fecaca', color: Colors.red }} textStyle={{ color: Colors.red }} onPress={handleLogout} />
-    </ScrollView>
+        {/* Active Order */}
+        {activeOrder && (
+          <Card accent={Colors.amber} onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })} style={{ marginTop: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '700' }}>#{activeOrder._id.slice(-6)}</Text>
+              <OrderStatusBadge status={activeOrder.status} />
+            </View>
+            <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 4 }}>📍 Pickup: {activeOrder.wholesaler?.storeName || 'Store'}</Text>
+            <Text style={{ fontSize: 13, color: Colors.gray600, marginBottom: 8 }}>🏠 Dropoff: {activeOrder.deliveryAddress?.street}</Text>
+            <AppButton title="Continue Current Order" onPress={() => navigation.navigate('OrderAssigned', { order: activeOrder })} />
+          </Card>
+        )}
+
+        {/* Removed Quick Actions – now in bottom tab bar */}
+      </ScrollView>
+
+      {/* Bottom Tab Bar */}
+      <BottomTabBar navigation={navigation} activeScreen="Dashboard" />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray100, paddingHorizontal: 16 },
+  container: { flex: 1, backgroundColor: Colors.gray100 },
+  scrollView: { flex: 1, paddingHorizontal: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 50, paddingBottom: 16, paddingHorizontal: 4 },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: Colors.primary600, justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },

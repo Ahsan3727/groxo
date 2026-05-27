@@ -1,6 +1,7 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { Radius } from '../theme';
+
 const statusConfig = {
   pending: { bg: '#fef3c7', text: '#92400e', label: 'Pending' },
   accepted: { bg: '#dbeafe', text: '#1e40af', label: 'Accepted' },

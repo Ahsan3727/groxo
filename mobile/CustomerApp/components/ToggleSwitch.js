@@ -1,14 +1,10 @@
-import React, { useRef } from 'react';
+﻿import React, { useRef } from 'react';
 import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { Colors } from '../theme';
 
 export default function ToggleSwitch({ value, onToggle }) {
   const translateX = useRef(new Animated.Value(value ? 22 : 0)).current;
-
-  React.useEffect(() => {
-    Animated.timing(translateX, { toValue: value ? 22 : 0, duration: 200, useNativeDriver: true }).start();
-  }, [value]);
-
+  React.useEffect(() => { Animated.timing(translateX, { toValue: value ? 22 : 0, duration: 200, useNativeDriver: true }).start(); }, [value]);
   return (
     <TouchableOpacity style={[styles.track, value && styles.activeTrack]} onPress={onToggle} activeOpacity={0.8}>
       <Animated.View style={[styles.thumb, { transform: [{ translateX }] }]} />

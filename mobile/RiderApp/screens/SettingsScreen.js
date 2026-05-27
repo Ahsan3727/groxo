@@ -3,8 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import AppButton from '../components/AppButton';
 import Card from '../components/Card';
 import ToggleSwitch from '../components/ToggleSwitch';
-import { Colors, Fonts } from '../../shared/theme';
-
+import { Colors, Fonts, Shadows, Radius } from '../theme';
 export default function SettingsScreen({ navigation }) {
   const [notifications, setNotifications] = useState(true);
   const [sound, setSound] = useState(true);

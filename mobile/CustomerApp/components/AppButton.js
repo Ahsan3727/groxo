@@ -1,25 +1,17 @@
-import React from 'react';
+﻿import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { Colors, Radius, Fonts } from '../theme';
+
 export default function AppButton({ title, onPress, loading, type = 'primary', size = 'md', style, textStyle, disabled }) {
   const btnStyle = [
-    styles.base,
-    type === 'primary' && styles.primary,
-    type === 'outline' && styles.outline,
-    type === 'ghost' && styles.ghost,
-    size === 'sm' && styles.sm,
-    size === 'xs' && styles.xs,
-    disabled && styles.disabled,
-    style,
+    styles.base, type === 'primary' && styles.primary, type === 'outline' && styles.outline,
+    type === 'ghost' && styles.ghost, size === 'sm' && styles.sm, size === 'xs' && styles.xs,
+    disabled && styles.disabled, style
   ];
   const txtStyle = [
-    styles.text,
-    type === 'primary' && styles.textPrimary,
-    type === 'outline' && styles.textOutline,
-    type === 'ghost' && styles.textGhost,
-    size === 'sm' && styles.textSm,
-    size === 'xs' && styles.textXs,
-    textStyle,
+    styles.text, type === 'primary' && styles.textPrimary, type === 'outline' && styles.textOutline,
+    type === 'ghost' && styles.textGhost, size === 'sm' && styles.textSm, size === 'xs' && styles.textXs,
+    textStyle
   ];
   return (
     <TouchableOpacity style={btnStyle} onPress={onPress} disabled={loading || disabled} activeOpacity={0.8}>
@@ -37,9 +29,6 @@ const styles = StyleSheet.create({
   xs: { paddingVertical: 6, paddingHorizontal: 12 },
   disabled: { opacity: 0.5 },
   text: { fontSize: Fonts.sizes.md, ...Fonts.semibold, letterSpacing: -0.2 },
-  textPrimary: { color: '#fff' },
-  textOutline: { color: Colors.gray600 },
-  textGhost: { color: Colors.gray600 },
-  textSm: { fontSize: Fonts.sizes.sm },
-  textXs: { fontSize: Fonts.sizes.xs },
+  textPrimary: { color: '#fff' }, textOutline: { color: Colors.gray600 }, textGhost: { color: Colors.gray600 },
+  textSm: { fontSize: Fonts.sizes.sm }, textXs: { fontSize: Fonts.sizes.xs },
 });

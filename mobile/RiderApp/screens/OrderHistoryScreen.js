@@ -3,9 +3,10 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import api from '../services/api';
 import Card from '../components/Card';
 import OrderStatusBadge from '../components/OrderStatusBadge';
-import { Colors, Fonts } from '../../shared/theme';
+import BottomTabBar from '../components/BottomTabBar';
+import { Colors, Fonts } from '../theme';
 
-export default function OrderHistoryScreen() {
+export default function OrderHistoryScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
@@ -28,9 +29,10 @@ export default function OrderHistoryScreen() {
             <Text style={{ fontSize: 13, color: Colors.gray600 }}>Amount: ${item.payment?.amount?.toFixed(2)}</Text>
           </Card>
         )}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 40, color: Colors.gray400 }}>No orders yet</Text>}
       />
+      <BottomTabBar navigation={navigation} activeScreen="Dashboard" />
     </View>
   );
 }

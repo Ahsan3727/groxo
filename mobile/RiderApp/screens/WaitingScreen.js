@@ -4,7 +4,8 @@ import { useActiveOrder } from '../context/ActiveOrderContext';
 import AppButton from '../components/AppButton';
 import Card from '../components/Card';
 import OrderStatusBadge from '../components/OrderStatusBadge';
-import { Colors, Fonts } from '../../shared/theme';
+import BottomTabBar from '../components/BottomTabBar';
+import { Colors, Fonts } from '../theme';
 
 export default function WaitingScreen({ navigation }) {
   const { availableOrders, fetchAvailableOrders, acceptOrder } = useActiveOrder();
@@ -49,9 +50,10 @@ export default function WaitingScreen({ navigation }) {
         renderItem={renderItem}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 40 }}><Text style={{ fontSize: 40 }}>📭</Text><Text style={{ color: Colors.gray400, marginTop: 8 }}>No available orders</Text></View>}
       />
+      <BottomTabBar navigation={navigation} activeScreen="Waiting" />
     </View>
   );
 }

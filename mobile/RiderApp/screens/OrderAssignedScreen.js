@@ -5,7 +5,8 @@ import * as Location from 'expo-location';
 import AppButton from '../components/AppButton';
 import Card from '../components/Card';
 import OrderStatusBadge from '../components/OrderStatusBadge';
-import { Colors, Fonts, Radius, Shadows } from '../../shared/theme';
+import BottomTabBar from '../components/BottomTabBar';
+import { Colors, Fonts, Radius, Shadows } from '../theme';
 
 export default function OrderAssignedScreen({ navigation, route }) {
   const { activeOrder: contextOrder, updateOrderStatus } = useActiveOrder();
@@ -70,7 +71,7 @@ export default function OrderAssignedScreen({ navigation, route }) {
         </View>
       </View>
 
-      <AppButton title="← Back" type="ghost" style={{ position: 'absolute', top: 50, left: 16, zIndex: 10 }} onPress={() => navigation.goBack()} />
+      <BottomTabBar navigation={navigation} activeScreen="OrderAssigned" />
     </View>
   );
 }
@@ -78,6 +79,6 @@ export default function OrderAssignedScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray100 },
   mapPlaceholder: { height: 200, backgroundColor: '#e8f5e9', borderRadius: Radius.lg, margin: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: Colors.gray200 },
-  orderCard: { backgroundColor: Colors.white, padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, position: 'absolute', bottom: 0, left: 0, right: 0, ...Shadows.md },
+  orderCard: { backgroundColor: Colors.white, padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, position: 'absolute', bottom: 70, left: 0, right: 0, ...Shadows.md },
   detailText: { fontSize: 13, color: Colors.gray600, marginBottom: 4 },
 });

@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, TextInput, Text, StyleSheet } from 'react-native';
-import { Colors, Radius } from '../../shared/theme';
-
+import { Colors, Fonts, Shadows, Radius } from '../theme';
 export default function InputGroup({ icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, autoCapitalize, editable = true }) {
   return (
     <View style={styles.container}>

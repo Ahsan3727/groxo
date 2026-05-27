@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import api from '../services/api';
 import Card from '../components/Card';
-import { Colors, Fonts, Radius } from '../../shared/theme';
+import BottomTabBar from '../components/BottomTabBar';
+import { Colors, Fonts, Radius } from '../theme';
 
-export default function EarningsHistoryScreen() {
+export default function EarningsHistoryScreen({ navigation }) {
   const [earnings, setEarnings] = useState([]);
 
   useEffect(() => {
@@ -35,8 +36,9 @@ export default function EarningsHistoryScreen() {
             <Text style={{ fontSize: 12, color: Colors.gray400 }}>{item.date.toLocaleDateString()}</Text>
           </Card>
         )}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
       />
+      <BottomTabBar navigation={navigation} activeScreen="EarningsHistory" />
     </View>
   );
 }

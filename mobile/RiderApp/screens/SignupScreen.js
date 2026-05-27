@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Ale
 import { useAuth } from '../context/AuthContext';
 import AppButton from '../components/AppButton';
 import InputGroup from '../components/InputGroup';
-import { Colors, Fonts, Shadows, Radius } from '../../shared/theme';
-
+import { Colors, Fonts, Shadows, Radius } from '../theme';
 export default function SignupScreen({ navigation }) {
   const { signup } = useAuth();
   const [name, setName] = useState('');
