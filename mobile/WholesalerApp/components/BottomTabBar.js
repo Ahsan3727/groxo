@@ -1,11 +1,10 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { Colors, Fonts, Shadows } from '../theme';
 
 const tabs = [
-  { label: 'Home', icon: '🏠', screen: 'Home' },
-  { label: 'Search', icon: '🔍', screen: 'Search' },
-  { label: 'Cart', icon: '🛒', screen: 'Cart' },
+  { label: 'Home', icon: '🏠', screen: 'Dashboard' },
+  { label: 'Products', icon: '📦', screen: 'Products' },
   { label: 'Orders', icon: '📋', screen: 'Orders' },
   { label: 'Profile', icon: '👤', screen: 'Profile' },
 ];

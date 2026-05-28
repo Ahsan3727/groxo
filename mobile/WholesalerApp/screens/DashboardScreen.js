@@ -1,300 +1,175 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Alert } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import useLocationTracking from '../hooks/useLocationTracking';
+import api from '../services/api';
+import AppButton from '../components/AppButton';
+import BottomTabBar from '../components/BottomTabBar';
+import { Colors, Fonts, Radius, Shadows } from '../theme';
 
-const DashboardScreen = ({ navigation }) => {
-  const { wholesaler } = useAuth();
-useLocationTracking(true);
-  const handleLogout = async () => {
-    await AsyncStorage.clear();
-    if (typeof window !== 'undefined') {
-      window.location.reload();
-    } else {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
+export default function DashboardScreen({ navigation }) {
+  const { wholesaler, logout } = useAuth();
+  const [stats, setStats] = useState({ products: 0, orders: 0, revenue: 0 });
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchStats = async () => {
+    try {
+      const { data: products } = await api.get('/products?wholesaler=me');
+      const { data: orders } = await api.get('/orders?status=pending');
+      setStats({
+        products: products.products?.length || 0,
+        orders: orders.length || 0,
+        revenue: orders.reduce((sum, o) => sum + (o.payment?.amount || 0), 0),
       });
-    }
+    } catch (e) { /* keep previous stats if endpoint fails */ }
+  };
+
+  useEffect(() => { fetchStats(); }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchStats();
+    setRefreshing(false);
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.clear();   // clear all stored tokens
+          logout();                     // update AuthContext → navigates to Login
+        },
+      },
+    ]);
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(wholesaler?.name || 'W').charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.greeting}>
-          Welcome, {wholesaler?.name?.split(' ')[0] || 'Wholesaler'}!
-        </Text>
-        <Text style={styles.email}>{wholesaler?.email}</Text>
-        {wholesaler?.storeName && (
-          <View style={styles.storeBadge}>
-            <Text style={styles.storeText}>🏪 {wholesaler.storeName}</Text>
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{(wholesaler?.name || 'W')[0].toUpperCase()}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greeting}>Hello, {wholesaler?.name?.split(' ')[0] || 'Wholesaler'}</Text>
+              <Text style={styles.storeName}>{wholesaler?.storeName || 'Your Store'}</Text>
+            </View>
           </View>
-        )}
-        {wholesaler?.businessLicense && (
-          <Text style={styles.licenseText}>License: {wholesaler.businessLicense}</Text>
-        )}
-      </View>
-
-      {/* Stats Cards */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>0</Text>
-          <Text style={styles.statLabel}>Products</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>0</Text>
-          <Text style={styles.statLabel}>Orders</Text>
+
+        {/* Stats Cards */}
+        <View style={styles.statsGrid}>
+          <View style={[styles.statCard, { backgroundColor: '#fff3e0' }]}>
+            <Text style={styles.statIcon}>📦</Text>
+            <Text style={styles.statValue}>{stats.products}</Text>
+            <Text style={styles.statLabel}>Products</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}>
+            <Text style={styles.statIcon}>📋</Text>
+            <Text style={styles.statValue}>{stats.orders}</Text>
+            <Text style={styles.statLabel}>Orders</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}>
+            <Text style={styles.statIcon}>💰</Text>
+            <Text style={styles.statValue}>₹{stats.revenue}</Text>
+            <Text style={styles.statLabel}>Revenue</Text>
+          </View>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>₹0</Text>
-          <Text style={styles.statLabel}>Revenue</Text>
+
+        {/* Recent Orders (optional, you can add a FlatList here later) */}
+
+        {/* Logout Button */}
+        <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+          <AppButton
+            title="🚪 Logout"
+            type="outline"
+            style={{ borderColor: '#fecaca' }}
+            textStyle={{ color: Colors.red }}
+            onPress={handleLogout}
+          />
         </View>
-      </View>
+      </ScrollView>
 
-      {/* Account Status */}
-      <View style={styles.statusCard}>
-        <Text style={styles.statusTitle}>Account Status</Text>
-        <View style={[styles.statusBadge, { backgroundColor: wholesaler?.isActive ? '#4CAF50' : '#f44336' }]}>
-          <Text style={styles.statusText}>{wholesaler?.isActive ? 'Active' : 'Inactive'}</Text>
-        </View>
-      </View>
-
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Business Actions</Text>
-      <View style={styles.menuGrid}>
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Products')}
-        >
-          <Text style={styles.menuIcon}>📦</Text>
-          <Text style={styles.menuText}>My Products</Text>
-          <Text style={styles.menuSubtext}>Manage inventory</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('AddProduct')}
-        >
-          <Text style={styles.menuIcon}>➕</Text>
-          <Text style={styles.menuText}>Add Product</Text>
-          <Text style={styles.menuSubtext}>New listing</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Orders')}
-        >
-          <Text style={styles.menuIcon}>📋</Text>
-          <Text style={styles.menuText}>Orders</Text>
-          <Text style={styles.menuSubtext}>View orders</Text>
-        </TouchableOpacity>
-<TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Map')}>
-  <Text style={styles.menuIcon}>🗺️</Text>
-  <Text style={styles.menuText}>My Map</Text>
-  <Text style={styles.menuSubtext}>View location</Text>
-</TouchableOpacity>
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Earnings')}
-        >
-          <Text style={styles.menuIcon}>💰</Text>
-          <Text style={styles.menuText}>Earnings</Text>
-          <Text style={styles.menuSubtext}>Revenue report</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.menuIcon}>👤</Text>
-          <Text style={styles.menuText}>Profile</Text>
-          <Text style={styles.menuSubtext}>Edit details</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Settings')}
-        >
-          <Text style={styles.menuIcon}>⚙️</Text>
-          <Text style={styles.menuText}>Settings</Text>
-          <Text style={styles.menuSubtext}>Preferences</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>🚪 Logout</Text>
-      </TouchableOpacity>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      {/* Bottom Navigation */}
+      <BottomTabBar navigation={navigation} activeScreen="Dashboard" />
+    </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.gray100,
   },
   header: {
-    backgroundColor: '#FF9800',
-    padding: 30,
-    paddingTop: 60,
-    alignItems: 'center',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    backgroundColor: Colors.white,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     marginBottom: 20,
+    ...Shadows.sm,
   },
   avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#fff',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.primary600,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
   avatarText: {
-    color: '#FF9800',
-    fontSize: 30,
-    fontWeight: 'bold',
-  },
-  greeting: {
     color: '#fff',
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
-  email: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    marginTop: 4,
+  greeting: {
+    fontSize: Fonts.sizes.lg,
+    fontWeight: '700',
+    color: Colors.gray900,
   },
-  storeBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 10,
+  storeName: {
+    fontSize: Fonts.sizes.sm,
+    color: Colors.gray500,
+    marginTop: 2,
   },
-  storeText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  licenseText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  statsRow: {
+  statsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    gap: 12,
     marginBottom: 16,
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    marginHorizontal: 4,
+    borderRadius: Radius.lg,
     padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  statValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FF9800',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 4,
-  },
-  statusCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  statusBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  statusText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#333',
-    marginLeft: 20,
-    marginBottom: 12,
-  },
-  menuGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-  },
-  menuItem: {
-    width: '46%',
-    backgroundColor: '#fff',
-    margin: '2%',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  menuIcon: {
-    fontSize: 36,
+  statIcon: {
+    fontSize: 24,
     marginBottom: 8,
   },
-  menuText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+  statValue: {
+    fontSize: Fonts.sizes.xl,
+    fontWeight: '700',
+    color: Colors.gray900,
     marginBottom: 2,
   },
-  menuSubtext: {
-    fontSize: 11,
-    color: '#999',
-  },
-  logoutButton: {
-    backgroundColor: '#f44336',
-    marginHorizontal: 16,
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  logoutText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+  statLabel: {
+    fontSize: Fonts.sizes.xs,
+    color: Colors.gray500,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
-
-export default DashboardScreen;

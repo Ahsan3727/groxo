@@ -1,6 +1,8 @@
 ﻿import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useCart } from '../context/CartContext';
+import { Colors, Fonts, Shadows, Radius } from '../theme';
+
 
 const ProductDetailScreen = ({ navigation, route }) => {
   const product = route?.params?.product;

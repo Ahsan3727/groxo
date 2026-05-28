@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import api from '../services/api';
-import { Colors } from '../theme/theme';
+import { Colors, Fonts, Radius } from '../theme/theme';
 export default function AddAddressScreen({ navigation }) {
   const [label, setLabel] = useState(''); const [line1, setLine1] = useState(''); const [city, setCity] = useState(''); const [pincode, setPincode] = useState('');
   const save = async () => { await api.post('/users/addresses', { label, line1, city, pincode }); navigation.goBack(); };

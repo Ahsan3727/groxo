@@ -7,27 +7,26 @@ import usePushNotifications from './hooks/usePushNotifications';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import HomeScreen from './screens/HomeScreen';
-import ProfileScreen from './screens/ProfileScreen';
-import ProductDetailScreen from './screens/ProductDetailScreen';
 import CartScreen from './screens/CartScreen';
-import SearchScreen from './screens/SearchScreen';
-import ProductListScreen from './screens/ProductListScreen';
 import OrdersScreen from './screens/OrdersScreen';
 import TrackOrderScreen from './screens/TrackOrderScreen';
-import MapScreen from './screens/MapScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import SearchScreen from './screens/SearchScreen';
+import ProductDetailScreen from './screens/ProductDetailScreen';
+import ProductListScreen from './screens/ProductListScreen';
 import { ActivityIndicator, View } from 'react-native';
 
 const Stack = createNativeStackNavigator();
 
-const AppNavigator = () => {
+function AppNavigator() {
   const { isAuthenticated, loading } = useAuth();
-
   usePushNotifications(isAuthenticated);
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
-        <ActivityIndicator size="large" color="#2196F3" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#16a34a" />
       </View>
     );
   }
@@ -37,14 +36,14 @@ const AppNavigator = () => {
       {isAuthenticated ? (
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
           <Stack.Screen name="Cart" component={CartScreen} />
-          <Stack.Screen name="Search" component={SearchScreen} />
-          <Stack.Screen name="ProductList" component={ProductListScreen} />
           <Stack.Screen name="Orders" component={OrdersScreen} />
           <Stack.Screen name="TrackOrder" component={TrackOrderScreen} />
-          <Stack.Screen name="Map" component={MapScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="Search" component={SearchScreen} />
+          <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+          <Stack.Screen name="ProductList" component={ProductListScreen} />
         </>
       ) : (
         <>
@@ -54,7 +53,7 @@ const AppNavigator = () => {
       )}
     </Stack.Navigator>
   );
-};
+}
 
 export default function App() {
   return (

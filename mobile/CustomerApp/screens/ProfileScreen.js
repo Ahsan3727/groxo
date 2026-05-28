@@ -1,12 +1,13 @@
 ﻿import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import Constants from 'expo-constants';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppButton from '../components/AppButton';
 import InputGroup from '../components/InputGroup';
 import Card from '../components/Card';
 import BottomTabBar from '../components/BottomTabBar';
-import { Colors, Fonts } from '../theme';
+import { Colors, Fonts, Shadows } from '../theme';
 
 export default function ProfileScreen({ navigation }) {
   const { customer, updateProfile, logout } = useAuth();
@@ -30,23 +31,35 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.header}>
-          <AppButton title="← Back" type="ghost" size="sm" onPress={() => navigation.goBack()} />
           <Text style={styles.title}>Profile</Text>
-          <AppButton title="Save" type="ghost" size="sm" textStyle={{ color: Colors.primary600 }} onPress={handleSave} />
         </View>
-        <View style={{ alignItems: 'center', marginVertical: 20 }}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{(customer?.name||'C')[0].toUpperCase()}</Text></View>
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{(customer?.name || 'C')[0].toUpperCase()}</Text>
+          </View>
+          <Text style={styles.name}>{customer?.name}</Text>
+          <Text style={styles.email}>{customer?.email}</Text>
         </View>
-        <Card style={{ marginHorizontal: 16 }}>
-          <InputGroup icon="👤" placeholder="Name" value={name} onChangeText={setName} />
-          <InputGroup icon="📧" placeholder="Email" value={customer?.email} editable={false} />
-          <InputGroup icon="📱" placeholder="Phone" value={phone} onChangeText={setPhone} />
-          <InputGroup icon="📍" placeholder="Street" value={street} onChangeText={setStreet} />
-          <InputGroup icon="🏙️" placeholder="City" value={city} onChangeText={setCity} />
+        <Card style={styles.menuCard}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
+            <Text style={styles.menuIcon}>📋</Text><Text style={styles.menuText}>My Orders</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem}>
+            <Text style={styles.menuIcon}>📍</Text><Text style={styles.menuText}>Saved Addresses</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem}>
+            <Text style={styles.menuIcon}>💳</Text><Text style={styles.menuText}>Payment Methods</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem}>
+            <Text style={styles.menuIcon}>🔔</Text><Text style={styles.menuText}>Notifications</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Settings')}>
+            <Text style={styles.menuIcon}>⚙️</Text><Text style={styles.menuText}>Settings</Text>
+          </TouchableOpacity>
         </Card>
-        <AppButton title="🚪 Logout" type="outline" style={{ marginHorizontal: 16, marginTop: 20, borderColor: '#fecaca' }} textStyle={{ color: Colors.red }} onPress={handleLogout} />
+        <AppButton title="Sign Out" type="outline" style={styles.logoutBtn} textStyle={{ color: Colors.red }} onPress={handleLogout} />
       </ScrollView>
       <BottomTabBar navigation={navigation} activeScreen="Profile" />
     </View>
@@ -55,8 +68,36 @@ export default function ProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray100 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 50, paddingHorizontal: 8 },
-  title: { fontSize: Fonts.sizes.xl, fontWeight: '700' },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.primary600, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#fff', fontSize: 30, fontWeight: '700' },
+  header: {
+    paddingTop: Constants.statusBarHeight + 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: Colors.white,
+    ...Shadows.sm,
+  },
+  title: { fontSize: Fonts.sizes.xl, fontWeight: '700', color: Colors.gray900 },
+  avatarContainer: { alignItems: 'center', marginVertical: 24 },
+  avatar: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: Colors.primary600,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatarText: { color: '#fff', fontSize: 28, fontWeight: '700' },
+  name: { fontSize: 18, fontWeight: '600', color: Colors.gray900 },
+  email: { fontSize: 12, color: Colors.gray400, marginTop: 4 },
+  menuCard: { marginHorizontal: 16 },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: Colors.gray200,
+  },
+  menuIcon: { fontSize: 20, width: 36, textAlign: 'center', marginRight: 12 },
+  menuText: { fontSize: 14, color: Colors.gray700 },
+  logoutBtn: { marginHorizontal: 16, marginTop: 24, borderColor: '#fecaca' },
 });
