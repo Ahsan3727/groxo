@@ -70,8 +70,8 @@ export const ActiveOrderProvider = ({ children }) => {
       
       // Dynamically choose the correct host for the current platform
 const baseUrl = Platform.OS === 'web'
-  ? 'http://localhost:5000'      // Web development
-  : 'http://10.0.2.2:5000';     // Android emulator (change for real device as needed)
+  ? 'https://groxo-backend.onrender.com'      // Web development
+  : 'https://groxo-backend.onrender.com';     // Android emulator (change for real device as needed)
 
 const socket = io(baseUrl, {
   query: { userId: rider._id },

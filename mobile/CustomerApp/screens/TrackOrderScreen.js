@@ -19,7 +19,7 @@ export default function TrackOrderScreen({ navigation, route }) {
       const customerData = await AsyncStorage.getItem('customerData');
       if (!token || !customerData) return;
       const customer = JSON.parse(customerData);
-      const socket = io(Platform.OS === 'web' ? 'http://localhost:5000' : 'http://10.0.2.2:5000', {
+      const socket = io(Platform.OS === 'web' ? 'https://groxo-backend.onrender.com' : 'https://groxo-backend.onrender.com', {
         query: { userId: customer._id },
         auth: { token },
       });
