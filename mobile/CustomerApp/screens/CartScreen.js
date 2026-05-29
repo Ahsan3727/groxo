@@ -12,7 +12,7 @@ import BottomTabBar from '../components/BottomTabBar';
 import { Colors, Fonts, Radius, Shadows } from '../theme';
 
 export default function CartScreen({ navigation }) {
-  const { cart, removeFromCart, clearCart, cartTotalItems } = useCart();
+  const { cart, removeFromCart, clearCart, cartTotalItems,changeCartQuantity  } = useCart();
   const { customer } = useAuth();
   const [loading, setLoading] = useState(false);
   const totalAmount = cart.reduce((sum, item) => sum + (item.adminPrice || item.price) * item.quantity, 0);
@@ -63,13 +63,13 @@ export default function CartScreen({ navigation }) {
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={styles.itemPrice}>${(item.adminPrice || item.price).toFixed(2)} each</Text>
                   <View style={styles.qtyRow}>
-                    <TouchableOpacity onPress={() => {/* TODO: add quantity reduction */}} style={styles.qtyBtn}>
-                      <Text>−</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.quantity}</Text>
-                    <TouchableOpacity onPress={() => {/* TODO: add quantity increase */}} style={styles.qtyBtn}>
-                      <Text>+</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => changeCartQuantity(item._id, -1)} style={styles.qtyBtn}>
+  <Text>−</Text>
+</TouchableOpacity>
+<Text style={styles.qtyText}>{item.quantity}</Text>
+<TouchableOpacity onPress={() => changeCartQuantity(item._id, 1)} style={styles.qtyBtn}>
+  <Text>+</Text>
+</TouchableOpacity>
                   </View>
                 </View>
                 <Text style={styles.itemTotal}>${((item.adminPrice || item.price) * item.quantity).toFixed(2)}</Text>
