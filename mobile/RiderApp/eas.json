@@ -6,6 +6,7 @@
   "build": {
     "production": {
       "android": {
+        "buildType": "apk",
         "gradleCommand": ":app:bundleRelease",
         "env": {
           "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m"
