@@ -5,6 +5,7 @@
   },
   "build": {
     "production": {
+      "projectRoot": "mobile/RiderApp",
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:bundleRelease",
