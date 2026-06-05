@@ -1,38 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import AppButton from '../components/AppButton';
-import Card from '../components/Card';
-import ToggleSwitch from '../components/ToggleSwitch';
-import BottomTabBar from '../components/BottomTabBar';
-import { Colors, Fonts } from '../theme';
+import { View, Text, Switch, TouchableOpacity, StyleSheet } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { Colors } from '../theme/theme';
 
-export default function SettingsScreen({ navigation }) {
-  const [notifications, setNotifications] = useState(true);
+export default function SettingsScreen() {
+  const [dark, setDark] = useState(false);
+  const [autoAccept, setAutoAccept] = useState(false);
+  const { logout } = useAuth();
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        <View style={styles.header}>
-          <AppButton title="← Back" type="ghost" size="sm" onPress={() => navigation.goBack()} />
-          <Text style={styles.title}>Settings</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <Card style={{ marginHorizontal: 16 }}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Notifications</Text>
-            <ToggleSwitch value={notifications} onToggle={() => setNotifications(!notifications)} />
-          </View>
-        </Card>
-      </ScrollView>
-      <BottomTabBar navigation={navigation} activeScreen="" />
+      <Text style={styles.title}>Settings</Text>
+      <View style={styles.row}>
+        <Text>Dark Mode</Text>
+        <Switch value={dark} onValueChange={setDark} />
+      </View>
+      <View style={styles.row}>
+        <Text>Auto-Accept Orders</Text>
+        <Switch value={autoAccept} onValueChange={setAutoAccept} />
+      </View>
+      <TouchableOpacity style={styles.item}><Text>Notifications</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.item}><Text>Language</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.item} onPress={logout}><Text style={{ color:Colors.error }}>Logout</Text></TouchableOpacity>
     </View>
   );
 }
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray100 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 50, paddingHorizontal: 8, marginBottom: 20 },
-  title: { fontSize: Fonts.sizes.xl, fontWeight: '700' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
-  label: { fontSize: Fonts.sizes.md, color: Colors.gray700 },
+  container: { flex:1, padding:16, backgroundColor:Colors.background },
+  title: { fontSize:24, fontWeight:'bold', marginBottom:16 },
+  row: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:12, borderBottomWidth:1, borderColor:Colors.lightGray },
+  item: { paddingVertical:14, borderBottomWidth:1, borderColor:Colors.lightGray }
 });

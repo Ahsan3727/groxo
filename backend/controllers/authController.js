@@ -8,7 +8,15 @@ exports.register = async (req, res) => {
     if (exists) return res.status(400).json({ message: 'User already exists' });
 
     const user = await User.create({ name, email, phone, password, role: role || 'customer' });
-
+    // If the user provided address coordinates, store them as currentLocation
+if (req.body.address && req.body.address.lat && req.body.address.lng) {
+  user.currentLocation = {
+    type: 'Point',
+    coordinates: [req.body.address.lng, req.body.address.lat],
+  };
+  user.lastLocationUpdate = new Date();
+  await user.save();
+}
     res.status(201).json({
       _id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role,
       token: generateToken(user._id)

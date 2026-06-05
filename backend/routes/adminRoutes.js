@@ -48,22 +48,36 @@ router.get('/riders/locations', protectAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/customers/locations
 router.get('/customers/locations', protectAdmin, async (req, res) => {
   try {
     const customers = await User.find({ role: 'customer' }).select('-password');
-    const data = customers.map(c => ({
-      _id: c._id,
-      name: c.name,
-      email: c.email,
-      phone: c.phone,
-      isActive: c.isActive,
-      address: c.address,
-      currentLocation: c.currentLocation
-        ? { lat: c.currentLocation.coordinates[1], lng: c.currentLocation.coordinates[0] }
-        : null,
-      lastLocationUpdate: c.lastLocationUpdate,
-      status: 'customer',
-    }));
+    const data = customers.map(c => {
+      // Use currentLocation if exists, otherwise try address.lat/lng
+      let loc = null;
+      if (c.currentLocation && c.currentLocation.coordinates && c.currentLocation.coordinates.length === 2) {
+        loc = {
+          lat: c.currentLocation.coordinates[1],
+          lng: c.currentLocation.coordinates[0],
+        };
+      } else if (c.address && c.address.lat && c.address.lng) {
+        loc = {
+          lat: c.address.lat,
+          lng: c.address.lng,
+        };
+      }
+      return {
+        _id: c._id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        isActive: c.isActive,
+        address: c.address,
+        currentLocation: loc,
+        lastLocationUpdate: c.lastLocationUpdate,
+        status: 'customer',
+      };
+    });
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: error.message });

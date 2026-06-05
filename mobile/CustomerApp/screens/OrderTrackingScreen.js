@@ -1,8 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList } from 'react-native';
 import api from '../services/api';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
-
 
 export default function OrderTrackingScreen() {
   const [orders, setOrders] = useState([]);

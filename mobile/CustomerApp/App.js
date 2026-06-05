@@ -1,9 +1,9 @@
 ﻿import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
-import usePushNotifications from './hooks/usePushNotifications';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -15,22 +15,12 @@ import SettingsScreen from './screens/SettingsScreen';
 import SearchScreen from './screens/SearchScreen';
 import ProductDetailScreen from './screens/ProductDetailScreen';
 import ProductListScreen from './screens/ProductListScreen';
-import { ActivityIndicator, View } from 'react-native';
+import OrderMapPicker from './screens/OrderMapPicker';
 
 const Stack = createNativeStackNavigator();
 
 function AppNavigator() {
-  const { isAuthenticated, loading } = useAuth();
-  usePushNotifications(isAuthenticated);
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#16a34a" />
-      </View>
-    );
-  }
-
+  const { isAuthenticated } = useAuth();
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
@@ -44,6 +34,7 @@ function AppNavigator() {
           <Stack.Screen name="Search" component={SearchScreen} />
           <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
           <Stack.Screen name="ProductList" component={ProductListScreen} />
+          <Stack.Screen name="OrderMapPicker" component={OrderMapPicker} />
         </>
       ) : (
         <>
@@ -57,12 +48,14 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
-      </CartProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <CartProvider>
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        </CartProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

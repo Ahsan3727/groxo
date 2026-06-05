@@ -4,9 +4,9 @@ import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
   if (Platform.OS === 'android') {
-    return 'https://groxo-backend.onrender.com/api';
+    return 'http://10.0.2.2:5000/api';
   }
-  return 'https://groxo-backend.onrender.com/api';
+  return 'http://localhost:5000/api';
 };
 
 const BASE_URL = getBaseUrl();

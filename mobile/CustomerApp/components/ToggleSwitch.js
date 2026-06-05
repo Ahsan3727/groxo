@@ -1,6 +1,6 @@
 ﻿import React, { useRef } from 'react';
 import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { Colors } from '../theme';
 
 export default function ToggleSwitch({ value, onToggle }) {
   const translateX = useRef(new Animated.Value(value ? 22 : 0)).current;

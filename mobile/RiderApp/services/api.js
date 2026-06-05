@@ -5,9 +5,9 @@ import { Platform } from 'react-native';
 // Auto-detect the correct URL
 const getBaseUrl = () => {
   if (Platform.OS === 'android') {
-    return 'https://groxo-backend.onrender.com/api'; // Android Emulator
+    return 'http://10.0.2.2:5000/api'; // Android Emulator
   }
-  return 'https://groxo-backend.onrender.com/api'; // iOS Simulator
+  return 'http://localhost:5000/api'; // iOS Simulator
 };
 
 // For physical device, uncomment and use your IP:

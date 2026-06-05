@@ -1,27 +1,37 @@
 ﻿import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors, Fonts, Shadows } from '../theme';  // your existing theme
 
 const tabs = [
   { label: 'Home', icon: '🏠', screen: 'Home' },
-  { label: 'Search', icon: '🔍', screen: 'Search' },
   { label: 'Cart', icon: '🛒', screen: 'Cart' },
   { label: 'Orders', icon: '📋', screen: 'Orders' },
   { label: 'Profile', icon: '👤', screen: 'Profile' },
 ];
 
 export default function BottomTabBar({ navigation, activeScreen }) {
+  const insets = useSafeAreaInsets();           // get the bottom safe area
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + 8 }]}>
       {tabs.map((tab) => {
         const isActive = activeScreen === tab.screen;
         return (
-          <TouchableOpacity key={tab.screen} style={styles.tabItem}
-            onPress={() => navigation.navigate(tab.screen)} activeOpacity={0.7}>
+          <TouchableOpacity
+            key={tab.screen}
+            style={styles.tabItem}
+            onPress={() => navigation.navigate(tab.screen)}
+            activeOpacity={0.7}
+          >
             <View style={styles.iconContainer}>
-              <Text style={[styles.icon, isActive && styles.activeIcon]}>{tab.icon}</Text>
+              <Text style={[styles.icon, isActive && styles.activeIcon]}>
+                {tab.icon}
+              </Text>
             </View>
-            <Text style={[styles.label, isActive && styles.activeLabel]}>{tab.label}</Text>
+            <Text style={[styles.label, isActive && styles.activeLabel]}>
+              {tab.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -30,11 +40,46 @@ export default function BottomTabBar({ navigation, activeScreen }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, paddingBottom: 20, backgroundColor: 'rgba(255,255,255,0.97)', borderTopWidth: 0.5, borderTopColor: Colors.gray200, position: 'absolute', bottom: 0, left: 0, right: 0, ...Shadows.md },
-  tabItem: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingVertical: 4 },
-  iconContainer: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  icon: { fontSize: 20 },
-  activeIcon: { transform: [{ scale: 1.2 }] },
-  label: { fontSize: 10, color: Colors.gray400, fontWeight: '500' },
-  activeLabel: { color: Colors.primary600, fontWeight: '600' },
+  container: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.gray200,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    ...Shadows.md,
+  },
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    paddingVertical: 8,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  icon: {
+    fontSize: 20,
+  },
+  activeIcon: {
+    transform: [{ scale: 1.2 }],
+  },
+  label: {
+    fontSize: 10,
+    color: Colors.gray400,
+    fontWeight: '500',
+  },
+  activeLabel: {
+    color: Colors.primary600,
+    fontWeight: '600',
+  },
 });

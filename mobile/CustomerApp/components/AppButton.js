@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { Colors, Fonts, Shadows, Radius } from '../theme';
+import { Colors, Radius, Fonts } from '../theme';
 
 export default function AppButton({ title, onPress, loading, type = 'primary', size = 'md', style, textStyle, disabled }) {
   const btnStyle = [

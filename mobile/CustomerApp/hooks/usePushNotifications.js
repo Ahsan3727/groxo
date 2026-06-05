@@ -1,39 +1,29 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import api from '../services/api';
 
 export default function usePushNotifications(enabled) {
-  const notificationListener = useRef();
-  const responseListener = useRef();
-
   useEffect(() => {
-    // 1) Don't run on web AND when not authenticated
     if (!enabled || Platform.OS === 'web') return;
 
-    // 2) Register for push notifications (real device only)
+    let sub1, sub2;
+
     registerForPushNotificationsAsync().then(token => {
-      if (token) {
-        saveTokenToBackend(token);
-      }
+      if (token) saveTokenToBackend(token);
     });
 
-    // 3) Listen for incoming notifications while app is open
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+    sub1 = Notifications.addNotificationReceivedListener(notification => {
       console.log('Notification received:', notification);
     });
-
-    // 4) Listen for notification taps
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+    sub2 = Notifications.addNotificationResponseReceivedListener(response => {
       console.log('Notification tapped:', response);
-      // You can navigate here based on response.notification.request.content.data
     });
 
     return () => {
-      // Use the subscription remove() method directly
-      if (notificationListener.current) notificationListener.current.remove();
-      if (responseListener.current) responseListener.current.remove();
+      if (sub1) sub1.remove();
+      if (sub2) sub2.remove();
     };
   }, [enabled]);
 

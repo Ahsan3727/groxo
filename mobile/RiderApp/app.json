@@ -7,6 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    
     "ios": {
       "supportsTablet": true
     },
@@ -16,17 +17,10 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "package": "com.ahsan3727.RiderApp"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "240d59d1-380a-476b-b287-24e7c085fc5d"
-      }
-    },
-    "owner": "ahsan3727"
+    }
   }
 }
