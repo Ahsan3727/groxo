@@ -5,7 +5,10 @@
   "build": {
     "production": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "env": {
+          "EAS_BUILD_NPM_INSTALL": "true"
+        }
       }
     }
   }
