@@ -4,7 +4,6 @@
   },
   "build": {
     "production": {
-      "root": "mobile/CustomerApp",
       "android": {
         "buildType": "apk",
         "env": {
