@@ -7,6 +7,7 @@ const Sidebar = ({ isOpen, onToggle, onLogout }) => {
   const currentPath = location.pathname;
 
   const menuItems = [
+    { path: '/banners', icon: '📢', label: 'Banners' },
     { path: '/dashboard', icon: '📊', label: 'Dashboard' },
     { path: '/users', icon: '👥', label: 'User Management' },
     { path: '/map', icon: '📍', label: 'Hub Map' },

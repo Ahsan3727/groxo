@@ -13,17 +13,20 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import UserManagement from './pages/UserManagement';
 import HubMap from './pages/HubMap';
-import Orders from './pages/OrderManagement';      // Your actual file names
-import Products from './pages/ProductApprovals';
+import OrderManagement from './pages/OrderManagement';
+import ProductApprovals from './pages/ProductApprovals';
 import Transactions from './pages/Transactions';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
-import Tickets from './pages/SupportTickets';
+import SupportTickets from './pages/SupportTickets';
+import Banners from './pages/Banners';   // ✅ newly added
 
 // Services
 import api from './services/api';
 
-// Protected Route Component
+// --------------------------------------------------------------------
+// ProtectedRoute – must be defined BEFORE any component that uses it
+// --------------------------------------------------------------------
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('adminToken');
   if (!token) {
@@ -32,7 +35,9 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-// Main App Layout (with sidebar and header)
+// --------------------------------------------------------------------
+// Main App Layout (sidebar + header)
+// --------------------------------------------------------------------
 const AppLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const navigate = useNavigate();
@@ -44,7 +49,6 @@ const AppLayout = ({ children }) => {
     navigate('/login');
   };
 
-  // Get current page title from path
   const getPageTitle = () => {
     const path = location.pathname;
     switch (path) {
@@ -58,6 +62,7 @@ const AppLayout = ({ children }) => {
       case '/reports': return 'Reports';
       case '/settings': return 'Settings';
       case '/tickets': return 'Support Tickets';
+      case '/banners': return 'Banners';         // ✅ new title
       default: return 'Groxo Admin';
     }
   };
@@ -83,121 +88,77 @@ const AppLayout = ({ children }) => {
   );
 };
 
+// --------------------------------------------------------------------
 // Main App Component
+// --------------------------------------------------------------------
 function App() {
   return (
     <>
       <Routes>
-        {/* Public Route - Login */}
+        {/* Public */}
         <Route path="/login" element={<Login />} />
 
-        {/* Protected Routes with Layout */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Dashboard />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Dashboard />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <UserManagement />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/map"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <HubMap />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/orders"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Orders />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/products"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Products />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/transactions"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Transactions />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Reports />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Settings />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tickets"
-          element={
-            <ProtectedRoute>
-              <AppLayout>
-                <Tickets />
-              </AppLayout>
-            </ProtectedRoute>
-          }
-        />
+        {/* Protected routes with layout */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <AppLayout><Dashboard /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <AppLayout><Dashboard /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/users" element={
+          <ProtectedRoute>
+            <AppLayout><UserManagement /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/map" element={
+          <ProtectedRoute>
+            <AppLayout><HubMap /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/orders" element={
+          <ProtectedRoute>
+            <AppLayout><OrderManagement /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/products" element={
+          <ProtectedRoute>
+            <AppLayout><ProductApprovals /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/transactions" element={
+          <ProtectedRoute>
+            <AppLayout><Transactions /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/reports" element={
+          <ProtectedRoute>
+            <AppLayout><Reports /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute>
+            <AppLayout><Settings /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/tickets" element={
+          <ProtectedRoute>
+            <AppLayout><SupportTickets /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/banners" element={
+          <ProtectedRoute>
+            <AppLayout><Banners /></AppLayout>
+          </ProtectedRoute>
+        } />
 
-        {/* Catch All - Redirect to Dashboard */}
+        {/* Catch all – redirect to dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {/* Toast Notifications */}
       <ToastContainer
         position="bottom-right"
         autoClose={3000}

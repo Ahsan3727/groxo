@@ -40,6 +40,7 @@ export default function OrderMapPicker({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(true);
   const mapRef = useRef(null);
+  const markerRef = useRef(null);
 
   // Get current location
   const getCurrentLocation = async () => {
@@ -131,13 +132,8 @@ export default function OrderMapPicker({ navigation, route }) {
             coordinate={location}
             draggable
             onDragEnd={handleMarkerDragEnd}
-          >
-            {/* Large circle + red pin – easy to drag */}
-            <View style={styles.markerContainer}>
-              <View style={styles.outerCircle} />
-              <View style={styles.redPin} />
-            </View>
-          </Marker>
+            pinColor="red"           // <-- clean red pin, easy to drag
+          />
         )}
       </MapView>
 
@@ -195,37 +191,6 @@ export default function OrderMapPicker({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF6F0' },
-  // Marker styles – larger touch target for easy dragging
-  markerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 70,
-    height: 80,
-  },
-  outerCircle: {
-    position: 'absolute',
-    top: 5,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 59, 48, 0.5)',
-    backgroundColor: 'rgba(255, 59, 48, 0.15)',
-  },
-  redPin: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FF3B30',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-    position: 'absolute',
-    top: 22,
-  },
   centerHint: {
     position: 'absolute',
     top: '50%',

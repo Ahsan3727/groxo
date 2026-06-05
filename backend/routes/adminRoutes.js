@@ -186,5 +186,42 @@ router.get('/riders', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+const Banner = require('../models/Banner');
 
+// GET /api/admin/banners
+router.get('/banners', protectAdmin, async (req, res) => {
+  const banners = await Banner.find().sort('order');
+  res.json(banners);
+});
+
+// POST /api/admin/banners
+router.post('/banners', protectAdmin, async (req, res) => {
+  try {
+    const { imageUrl, link, isActive, order } = req.body;
+    const banner = await Banner.create({ imageUrl, link, isActive, order });
+    res.status(201).json(banner);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/admin/banners/:id
+router.put('/banners/:id', protectAdmin, async (req, res) => {
+  try {
+    const banner = await Banner.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(banner);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/banners/:id
+router.delete('/banners/:id', protectAdmin, async (req, res) => {
+  try {
+    await Banner.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Banner deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 module.exports = router;

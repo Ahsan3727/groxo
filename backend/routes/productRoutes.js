@@ -2,6 +2,7 @@
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const Product = require('../models/Product');
+const Order = require('../models/Order');
 
 // ---------- WHOLESALER: Add product (automatically pending) ----------
 router.post('/', protect, async (req, res) => {
@@ -41,5 +42,21 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
+// GET /api/products/popular
+router.get('/popular', async (req, res) => {
+  try {
+    const popular = await Order.aggregate([
+      { $unwind: '$items' },
+      { $group: { _id: '$items.product', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+      { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
+      { $unwind: '$product' },
+      { $replaceRoot: { newRoot: '$product' } }
+    ]);
+    res.json({ products: popular });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 module.exports = router;
