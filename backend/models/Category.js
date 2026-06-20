@@ -6,15 +6,20 @@ const categorySchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  // For global categories, wholesaler is null / undefined
   wholesaler: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    default: null,
     index: true,
+  },
+  isGlobal: {
+    type: Boolean,
+    default: true,     // categories created by admin are global
   },
 }, { timestamps: true });
 
-// A category name must be unique per wholesaler
-categorySchema.index({ name: 1, wholesaler: 1 }, { unique: true });
+// Ensure a global category name is unique across all wholesalers
+categorySchema.index({ name: 1, isGlobal: 1 }, { unique: true, partialFilterExpression: { isGlobal: true } });
 
 module.exports = mongoose.model('Category', categorySchema);

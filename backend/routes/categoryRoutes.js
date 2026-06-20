@@ -3,38 +3,55 @@ const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const Category = require('../models/Category');
 
-// GET all categories for the logged-in wholesaler
-router.get('/', protect, async (req, res) => {
-  if (req.user.role !== 'wholesaler') {
-    return res.status(403).json({ message: 'Only wholesalers can access' });
-  }
+// ─── ADMIN: Get all categories (global + per-wholesaler, for admin panel) ───
+router.get('/admin', protect, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
-    const categories = await Category.find({ wholesaler: req.user._id }).sort('name');
+    const categories = await Category.find({}).sort('name');
     res.json({ categories });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// POST create a new category
-router.post('/', protect, async (req, res) => {
-  if (req.user.role !== 'wholesaler') {
-    return res.status(403).json({ message: 'Only wholesalers can create categories' });
-  }
+// ─── ADMIN: Create a global category ───
+router.post('/admin', protect, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
     const { name } = req.body;
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: 'Category name is required' });
-    }
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Category name required' });
     const category = await Category.create({
       name: name.trim(),
-      wholesaler: req.user._id,
+      isGlobal: true,
     });
     res.status(201).json({ category });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ message: 'Category already exists' });
-    }
+    if (error.code === 11000) return res.status(400).json({ message: 'Category already exists' });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ─── ADMIN: Delete a global category ───
+router.delete('/admin/:id', protect, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  try {
+    await Category.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Category deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ─── WHOLESALER: Get all global categories (for AddProduct screen) ───
+router.get('/global', protect, async (req, res) => {
+  // Wholesaler or admin can fetch global categories
+  if (req.user.role !== 'wholesaler' && req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied' });
+  }
+  try {
+    const categories = await Category.find({ isGlobal: true }).sort('name');
+    res.json({ categories });
+  } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
