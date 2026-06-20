@@ -17,8 +17,8 @@ router.post('/', protect, async (req, res) => {
       description,
       image,
       category,
-      price,                  // wholesaler sets this
-      wholesalerPrice: price, // original price for admin reference
+      price,
+      wholesalerPrice: price,
       wholesaler: req.user._id,
       stock,
       status: 'pending',
@@ -31,7 +31,25 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
-// ---------- CUSTOMER: Get only approved products ----------
+// ---------- WHOLESALER: Get their own products (all statuses) ----------
+router.get('/my', protect, async (req, res) => {
+  try {
+    // Only wholesalers can access this endpoint
+    if (req.user.role !== 'wholesaler' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const products = await Product.find({ wholesaler: req.user._id })
+      .populate('wholesaler', 'storeName name')
+      .sort({ createdAt: -1 });
+
+    res.json({ products });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- CUSTOMER: Get only approved products (public) ----------
 router.get('/', async (req, res) => {
   try {
     const filter = { isApproved: true, status: 'approved' };
@@ -42,6 +60,7 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 // GET /api/products/popular
 router.get('/popular', async (req, res) => {
   try {
@@ -59,4 +78,5 @@ router.get('/popular', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 module.exports = router;
