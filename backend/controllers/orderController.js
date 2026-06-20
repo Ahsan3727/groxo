@@ -74,21 +74,21 @@ exports.createOrder = async (req, res) => {
     console.log('Generated orderNumber:', orderNumber);
 
     const order = await Order.create({
-      orderNumber,
-      customer: req.user._id,
-      wholesaler: wholesalerId,
-      items: orderItems,
-      deliveryAddress: deliveryAddress || {},
-      payment: {
-        method: payment?.method || 'cod',
-        amount: totalAmount,
-        status: 'pending',
-      },
-      status: 'pending',
-      packingStatus: 'pending',
-      confirmedByAdmin: false,
-      timeline: [{ status: 'pending', timestamp: new Date(), note: 'Order placed' }],
-    });
+  orderNumber,
+  customer: req.user._id,
+  wholesaler: wholesalerId,
+  items: orderItems,
+  deliveryAddress: deliveryAddress || {},
+  payment: {
+    method: payment?.method || 'cod',
+    amount: totalAmount,
+    status: 'pending',
+  },
+  status: 'confirmed',              // ← was 'pending'
+  packingStatus: 'pending',
+  confirmedByAdmin: true,           // ← auto-confirmed
+  timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
+});
 
     console.log('Order created:', order._id);
 
