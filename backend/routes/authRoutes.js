@@ -23,6 +23,20 @@ router.put('/push-token', protect, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// PUT /api/auth/push-token
+router.put('/push-token', protect, async (req, res) => {
+  const { expoPushToken } = req.body;
+  if (!expoPushToken) return res.status(400).json({ message: 'Token required' });
+
+  try {
+    const user = await User.findById(req.user._id);
+    user.expoPushToken = expoPushToken;
+    await user.save();
+    res.json({ message: 'Push token saved' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 // PUT /api/auth/location
 router.put('/location', protect, async (req, res) => {
   const { lat, lng } = req.body;

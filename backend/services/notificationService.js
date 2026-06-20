@@ -1,15 +1,36 @@
-﻿const { sendSMS } = require('./smsService');
-const { sendEmail } = require('./emailService');
-const { sendPush } = require('../utils/pushHelper');
+﻿const { Expo } = require('expo-server-sdk');
 
-const sendNotification = async (recipient, type, title, body, data = {}) => {
-  // Save to DB
-  const Notification = require('../models/Notification');
-  await Notification.create({ recipient: recipient._id, type, title, body, data });
+const expo = new Expo();
 
-  // Send push, SMS, email based on user preferences (simplified)
-  // In real app, check recipient's notification settings.
-  console.log(`Sending ${type} notification to ${recipient.name || recipient.phone}`);
+/**
+ * Send a push notification to a single token.
+ * @param {string} pushToken - Expo push token
+ * @param {string} title       - Notification title
+ * @param {string} body        - Notification body
+ * @param {object} data        - Data to pass along (e.g., { orderId: '...' })
+ */
+const sendPushNotification = async (pushToken, title, body, data = {}) => {
+  if (!Expo.isExpoPushToken(pushToken)) {
+    console.error(`Invalid Expo push token: ${pushToken}`);
+    return;
+  }
+
+  const messages = [
+    {
+      to: pushToken,
+      sound: 'default',
+      title,
+      body,
+      data,
+    },
+  ];
+
+  try {
+    const tickets = await expo.sendPushNotificationsAsync(messages);
+    console.log('Push notification ticket:', tickets);
+  } catch (error) {
+    console.error('Push notification error:', error);
+  }
 };
 
-module.exports = { sendNotification };
+module.exports = { sendPushNotification };

@@ -2,28 +2,30 @@
 const Product = require('../models/Product');
 const User = require('../models/User');
 const sendPushNotification = require('../utils/sendPushNotification');
+
+// ---------- Utility: Emit real-time event ----------
 const emitOrderUpdate = (req, order) => {
   const io = req.app.get('io');
   if (io) {
     io.emit('orderUpdated', order);
-    // Emit to specific customer/rider/wholesaler rooms if needed
     if (order.customer) io.to(order.customer.toString()).emit('orderUpdated', order);
     if (order.rider) io.to(order.rider.toString()).emit('orderUpdated', order);
     if (order.wholesaler) io.to(order.wholesaler.toString()).emit('orderUpdated', order);
   }
 };
+
+// ---------- Utility: Unique order number ----------
 const generateOrderNumber = async () => {
   const date = new Date();
   const datePart = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
   const random = Math.floor(1000 + Math.random() * 9000);
   const orderNumber = `ORD-${datePart}-${random}`;
-
-  // Ensure it's unique (in case of collision)
   const exists = await Order.findOne({ orderNumber });
   if (exists) return generateOrderNumber();
   return orderNumber;
 };
 
+// ---------- CREATE ORDER ----------
 exports.createOrder = async (req, res) => {
   try {
     const { items, deliveryAddress, payment } = req.body;
@@ -57,7 +59,7 @@ exports.createOrder = async (req, res) => {
       });
       totalAmount += price * (item.quantity || 1);
 
-      // Get wholesaler from the first product
+      // Use the first product's wholesaler as the order's wholesaler
       if (!wholesalerId && product.wholesaler) {
         wholesalerId = product.wholesaler;
         console.log('Wholesaler set from product:', wholesalerId);
@@ -70,28 +72,44 @@ exports.createOrder = async (req, res) => {
     }
 
     const orderNumber = await generateOrderNumber();
-console.log('Generated orderNumber:', orderNumber);
+    console.log('Generated orderNumber:', orderNumber);
 
-const order = await Order.create({
-  orderNumber,          // ✅ NEW – must be the first field if the schema expects it, order doesn't matter
-  customer: req.user._id,
-  wholesaler: wholesalerId,
-  items: orderItems,
-  deliveryAddress: deliveryAddress || {},
-  payment: {
-    method: payment?.method || 'cod',
-    amount: totalAmount,
-    status: 'pending',
-  },
-  status: 'pending',
-  packingStatus: 'pending',
-  confirmedByAdmin: false,
-  timeline: [{ status: 'pending', timestamp: new Date(), note: 'Order placed' }],
-});
+    const order = await Order.create({
+      orderNumber,
+      customer: req.user._id,
+      wholesaler: wholesalerId,
+      items: orderItems,
+      deliveryAddress: deliveryAddress || {},
+      payment: {
+        method: payment?.method || 'cod',
+        amount: totalAmount,
+        status: 'pending',
+      },
+      status: 'pending',
+      packingStatus: 'pending',
+      confirmedByAdmin: false,
+      timeline: [{ status: 'pending', timestamp: new Date(), note: 'Order placed' }],
+    });
 
     console.log('Order created:', order._id);
 
     await order.populate(['customer', 'wholesaler', 'items.product']);
+
+    // ---------- 👇 Push Notification for the Wholesaler ----------
+    try {
+      const wholesalerUser = await User.findById(wholesalerId).select('expoPushToken');
+      if (wholesalerUser && wholesalerUser.expoPushToken) {
+        sendPushNotification(
+          wholesalerUser.expoPushToken,
+          'New Order Received!',
+          `You have a new order #${order.orderNumber}. Tap to view.`,
+          { type: 'new_order', orderId: order._id.toString() }
+        );
+      }
+    } catch (notifErr) {
+      console.error('Wholesaler push notification failed:', notifErr.message);
+      // Non-critical – order still goes through
+    }
 
     // Socket emit
     const io = req.app.get('io');
@@ -105,13 +123,11 @@ const order = await Order.create({
   }
 };
 
-// Get orders based on user role
-// Get orders based on user role
+// ---------- GET ORDERS (role-based) ----------
 exports.getOrders = async (req, res) => {
   try {
     const filter = {};
 
-    // For riders: also allow filtering by status from query param
     if (req.query.status) {
       filter.status = req.query.status;
     }
@@ -123,7 +139,7 @@ exports.getOrders = async (req, res) => {
     } else if (req.user.role === 'wholesaler') {
       filter.wholesaler = req.user._id;
     }
-    // admin sees all, no extra filter
+    // admin sees all
 
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
@@ -138,7 +154,7 @@ exports.getOrders = async (req, res) => {
   }
 };
 
-// Get single order by ID
+// ---------- GET SINGLE ORDER ----------
 exports.getOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
@@ -149,13 +165,12 @@ exports.getOrder = async (req, res) => {
 
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Non-admin users can only see their own orders
     if (req.user.role !== 'admin') {
-      const isOwner = 
+      const isOwner =
         order.customer?._id?.toString() === req.user._id.toString() ||
         order.rider?._id?.toString() === req.user._id.toString() ||
         order.wholesaler?._id?.toString() === req.user._id.toString();
-      
+
       if (!isOwner) return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -165,40 +180,12 @@ exports.getOrder = async (req, res) => {
   }
 };
 
-// Update order status (rider or admin)
+// ---------- UPDATE ORDER STATUS ----------
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status, note, riderLocation } = req.body;
     const order = await Order.findById(req.params.id);
-    // Notify customer of status change
-if (order.customer) {
-  sendPushNotification(
-    order.customer,
-    'Order Update',
-    `Your order is now ${status.replace(/_/g, ' ')}`,
-    { orderId: order._id.toString(), status }
-  );
-}
 
-// Notify rider when assigned (when status becomes 'confirmed')
-if (status === 'confirmed' && order.rider) {
-  sendPushNotification(
-    order.rider,
-    'New Delivery',
-    'You have been assigned a new order!',
-    { orderId: order._id.toString() }
-  );
-}
-
-// Notify wholesaler when order is placed (status 'pending')
-if (status === 'pending' && order.wholesaler) {
-  sendPushNotification(
-    order.wholesaler,
-    'New Order',
-    'A new order is waiting for you!',
-    { orderId: order._id.toString() }
-  );
-}
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     // Validate status transition
@@ -220,17 +207,15 @@ if (status === 'pending' && order.wholesaler) {
       });
     }
 
-    // If assigning rider
+    // Optional rider assignment (admin)
     if (req.body.rider) {
       order.rider = req.body.rider;
     }
 
-    // If status is out_for_delivery, set pickupLocation
+    // Location updates
     if (status === 'out_for_delivery' && riderLocation) {
       order.pickupLocation = riderLocation;
     }
-
-    // If rider sends location during delivery
     if (riderLocation) {
       order.riderLocation = riderLocation;
     }
@@ -248,19 +233,48 @@ if (status === 'pending' && order.wholesaler) {
 
     await order.save();
     await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
-emitOrderUpdate(req, order);
+
+    // ---------- Push Notifications for status changes ----------
+    if (order.customer) {
+      sendPushNotification(
+        order.customer,
+        'Order Update',
+        `Your order is now ${status.replace(/_/g, ' ')}`,
+        { orderId: order._id.toString(), status }
+      );
+    }
+
+    if (status === 'confirmed' && order.rider) {
+      sendPushNotification(
+        order.rider,
+        'New Delivery',
+        'You have been assigned a new order!',
+        { orderId: order._id.toString() }
+      );
+    }
+
+    if (status === 'pending' && order.wholesaler) {
+      sendPushNotification(
+        order.wholesaler,
+        'New Order',
+        'A new order is waiting for you!',
+        { orderId: order._id.toString() }
+      );
+    }
+
+    emitOrderUpdate(req, order);
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Admin: assign rider to order
+// ---------- ADMIN: ASSIGN RIDER ----------
 exports.assignRider = async (req, res) => {
   try {
     const { riderId } = req.body;
     const order = await Order.findById(req.params.id);
-    
+
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     const rider = await User.findById(riderId);
@@ -279,7 +293,17 @@ exports.assignRider = async (req, res) => {
     await order.save();
     await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
 
-emitOrderUpdate(req, order);
+    // Push notification to the newly assigned rider
+    if (rider.expoPushToken) {
+      sendPushNotification(
+        rider.expoPushToken,
+        'New Delivery',
+        'You have been assigned a new order!',
+        { orderId: order._id.toString() }
+      );
+    }
+
+    emitOrderUpdate(req, order);
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
