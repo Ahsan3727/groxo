@@ -5,8 +5,10 @@ const productSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
   price: { type: Number, required: true },
-  category: String,
+category: { type: String, required: true },  // the category name (string)
   images: [String],
+  weight: { type: Number },  // optional, in kg
+unit: { type: String, enum: ['piece', 'kg', 'liter', 'pack', 'box', 'dozen', 'other'], default: 'piece' },
   stock: { type: Number, default: 0 },
   isApproved: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },

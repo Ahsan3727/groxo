@@ -41,6 +41,7 @@ app.use('/api/wholesalers', require('./routes/wholesalerRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/banners', require('./routes/bannerRoutes'));
+app.use('/api/categories', require('./routes/categoryRoutes'));
 
 app.get('/', (req, res) => res.json({ message: 'Groxo API is running' }));
 app.get('/api/rider/dashboard', (req, res) => res.json({ test: true }));
