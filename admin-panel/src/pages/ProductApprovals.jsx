@@ -19,7 +19,8 @@ const ProductApprovals = () => {
   // ────────── Product Approvals State ──────────
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [adminPrice, setAdminPrice] = useState('');
 
@@ -46,10 +47,15 @@ const ProductApprovals = () => {
     }
   };
 
-  const handleOpenModal = (product) => {
+  const handleOpenPriceModal = (product) => {
     setSelectedProduct(product);
     setAdminPrice(product.adminPrice || product.wholesalerPrice || '');
-    setShowModal(true);
+    setShowPriceModal(true);
+  };
+
+  const handleOpenDetailModal = (product) => {
+    setSelectedProduct(product);
+    setShowDetailModal(true);
   };
 
   const handleApprove = async (productId) => {
@@ -59,7 +65,7 @@ const ProductApprovals = () => {
         adminPrice: Number(adminPrice),
       });
       toast.success('Product approved!');
-      setShowModal(false);
+      setShowPriceModal(false);
       fetchPendingProducts();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Approval failed');
@@ -173,13 +179,22 @@ const ProductApprovals = () => {
                           </Badge>
                         </td>
                         <td>
+                          {/* Details button always visible */}
+                          <Button
+                            size="sm"
+                            variant="outline-info"
+                            className="me-1"
+                            onClick={() => handleOpenDetailModal(product)}
+                          >
+                            Details
+                          </Button>
                           {product.status === 'pending' && (
                             <>
                               <Button
                                 size="sm"
                                 variant="success"
                                 className="me-1"
-                                onClick={() => handleOpenModal(product)}
+                                onClick={() => handleOpenPriceModal(product)}
                               >
                                 Approve & Set Price
                               </Button>
@@ -196,7 +211,7 @@ const ProductApprovals = () => {
                             <Button
                               size="sm"
                               variant="outline-success"
-                              onClick={() => handleOpenModal(product)}
+                              onClick={() => handleOpenPriceModal(product)}
                             >
                               Reconsider
                             </Button>
@@ -216,7 +231,6 @@ const ProductApprovals = () => {
           <h4 className="mb-3">🏷️ Global Categories</h4>
           <Card className="border-0 shadow-sm">
             <Card.Body>
-              {/* Create new category form */}
               <Form onSubmit={handleCreateCategory} className="mb-3">
                 <InputGroup>
                   <Form.Control
@@ -231,7 +245,6 @@ const ProductApprovals = () => {
                 </InputGroup>
               </Form>
 
-              {/* List of categories */}
               {categories.length === 0 ? (
                 <p className="text-muted text-center">No categories yet</p>
               ) : (
@@ -258,8 +271,8 @@ const ProductApprovals = () => {
         </Col>
       </Row>
 
-      {/* Price Setting Modal (unchanged) */}
-      <Modal show={showModal} onHide={() => setShowModal(false)}>
+      {/* ────────── Price Setting Modal (unchanged) ────────── */}
+      <Modal show={showPriceModal} onHide={() => setShowPriceModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Set Final Price – {selectedProduct?.name}</Modal.Title>
         </Modal.Header>
@@ -277,11 +290,87 @@ const ProductApprovals = () => {
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
+          <Button variant="secondary" onClick={() => setShowPriceModal(false)}>
             Cancel
           </Button>
           <Button variant="success" onClick={() => handleApprove(selectedProduct._id)}>
             Approve at Rs. {adminPrice}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ────────── Product Detail Modal (NEW) ────────── */}
+      <Modal
+        show={showDetailModal}
+        onHide={() => setShowDetailModal(false)}
+        size="lg"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>📋 Product Details</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedProduct && (
+            <div className="p-2">
+              {/* Image (if available) */}
+              {selectedProduct.image && (
+                <div className="text-center mb-3">
+                  <img
+                    src={selectedProduct.image}
+                    alt={selectedProduct.name}
+                    style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '8px' }}
+                  />
+                </div>
+              )}
+
+              {/* Basic Information */}
+              <h5 className="mb-3">{selectedProduct.name}</h5>
+              <Row className="mb-3">
+                <Col md={6}>
+                  <p><strong>Wholesaler:</strong> {selectedProduct.wholesaler?.storeName || selectedProduct.wholesaler?.name || 'N/A'}</p>
+                  <p><strong>Category:</strong> {selectedProduct.category}</p>
+                  <p><strong>Unit:</strong> {selectedProduct.unit || 'N/A'}</p>
+                  <p><strong>Weight:</strong> {selectedProduct.weight ? `${selectedProduct.weight} kg` : 'N/A'}</p>
+                </Col>
+                <Col md={6}>
+                  <p><strong>Wholesaler Price:</strong> Rs. {selectedProduct.wholesalerPrice || selectedProduct.price || 0}</p>
+                  <p><strong>Admin Price:</strong> Rs. {selectedProduct.adminPrice || 'Not set'}</p>
+                  <p><strong>Stock:</strong> {selectedProduct.stock || 0}</p>
+                  <p><strong>Status:</strong>{' '}
+                    <Badge
+                      bg={
+                        selectedProduct.status === 'pending'
+                          ? 'warning'
+                          : selectedProduct.status === 'approved'
+                          ? 'success'
+                          : 'danger'
+                      }
+                    >
+                      {selectedProduct.status}
+                    </Badge>
+                  </p>
+                </Col>
+              </Row>
+
+              {/* Description */}
+              <div className="mb-3">
+                <strong>Description:</strong>
+                <p className="mt-1">{selectedProduct.description || 'No description provided'}</p>
+              </div>
+
+              {/* Additional details if available */}
+              {selectedProduct.isApproved !== undefined && (
+                <p>
+                  <strong>Approval Status:</strong>{' '}
+                  {selectedProduct.isApproved ? 'Approved' : 'Not Approved'}
+                </p>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
+            Close
           </Button>
         </Modal.Footer>
       </Modal>
