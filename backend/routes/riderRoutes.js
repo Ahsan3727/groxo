@@ -4,7 +4,27 @@ const { protect } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const Order = require('../models/Order');
 
-// PUT /api/rider/location
+// ---------- GET active order for the logged-in rider ----------
+router.get('/active-order', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'rider') {
+      return res.status(403).json({ message: 'Rider access only' });
+    }
+
+    const order = await Order.findOne({
+      rider: req.user._id,
+      status: { $nin: ['delivered', 'cancelled'] }
+    })
+      .populate('wholesaler', 'storeName name address')
+      .populate('customer', 'name phone deliveryAddress');
+
+    res.json({ order });   // null if no active order
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- PUT /api/rider/location (unchanged) ----------
 router.put('/location', protect, async (req, res) => {
   if (req.user.role !== 'rider') {
     return res.status(403).json({ message: 'Rider access only' });
@@ -21,7 +41,6 @@ router.put('/location', protect, async (req, res) => {
     rider.lastLocationUpdate = new Date();
     await rider.save();
 
-    // Notify customers of any active delivery for this rider
     const activeDelivery = await Order.findOne({
       rider: req.user._id,
       status: 'out_for_delivery',
@@ -44,7 +63,8 @@ router.put('/location', protect, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-// PUT /api/auth/push-token
+
+// ---------- PUT /api/rider/push-token (unchanged) ----------
 router.put('/push-token', protect, async (req, res) => {
   const { expoPushToken } = req.body;
   if (!expoPushToken) return res.status(400).json({ message: 'Token required' });
@@ -58,12 +78,12 @@ router.put('/push-token', protect, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-// GET /api/rider/dashboard (optional, keeps the 404 from earlier away)
+
+// ---------- GET /api/rider/dashboard (unchanged) ----------
 router.get('/dashboard', protect, async (req, res) => {
   if (req.user.role !== 'rider') {
     return res.status(403).json({ message: 'Rider access only' });
   }
-  // Return dummy stats (replace with real DB queries later)
   res.json({
     todayEarnings: 0,
     weekEarnings: 0,
