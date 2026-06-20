@@ -59,7 +59,6 @@ exports.createOrder = async (req, res) => {
       });
       totalAmount += price * (item.quantity || 1);
 
-      // Use the first product's wholesaler as the order's wholesaler
       if (!wholesalerId && product.wholesaler) {
         wholesalerId = product.wholesaler;
         console.log('Wholesaler set from product:', wholesalerId);
@@ -95,7 +94,7 @@ exports.createOrder = async (req, res) => {
 
     await order.populate(['customer', 'wholesaler', 'items.product']);
 
-    // ---------- 👇 Push Notification for the Wholesaler ----------
+    // ---------- Push notification to wholesaler ----------
     try {
       const wholesalerUser = await User.findById(wholesalerId).select('expoPushToken');
       if (wholesalerUser && wholesalerUser.expoPushToken) {
@@ -108,12 +107,14 @@ exports.createOrder = async (req, res) => {
       }
     } catch (notifErr) {
       console.error('Wholesaler push notification failed:', notifErr.message);
-      // Non-critical – order still goes through
     }
 
-    // Socket emit
+    // ---------- Emit socket events ----------
     const io = req.app.get('io');
-    if (io) io.emit('orderUpdated', order);
+    if (io) {
+      io.emit('orderUpdated', order);                  // general broadcast
+      io.to('riders').emit('newAvailableOrder', order); // notify all online riders
+    }
 
     res.status(201).json(order);
   } catch (error) {
@@ -139,7 +140,6 @@ exports.getOrders = async (req, res) => {
     } else if (req.user.role === 'wholesaler') {
       filter.wholesaler = req.user._id;
     }
-    // admin sees all
 
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
@@ -170,7 +170,6 @@ exports.getOrder = async (req, res) => {
         order.customer?._id?.toString() === req.user._id.toString() ||
         order.rider?._id?.toString() === req.user._id.toString() ||
         order.wholesaler?._id?.toString() === req.user._id.toString();
-
       if (!isOwner) return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -188,10 +187,10 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Validate status transition
+    // Allowed transitions
     const validTransitions = {
       pending: ['confirmed', 'cancelled'],
-      confirmed: ['packing', 'cancelled'],
+      confirmed: ['packing', 'out_for_delivery', 'cancelled'], // ← rider can skip packing
       packing: ['ready_for_pickup', 'cancelled'],
       ready_for_pickup: ['out_for_delivery', 'cancelled'],
       out_for_delivery: ['delivered', 'disputed'],
@@ -200,6 +199,16 @@ exports.updateOrderStatus = async (req, res) => {
       disputed: [],
     };
 
+    // Special rule: rider can go directly from 'confirmed' to 'out_for_delivery'
+    // ONLY if the rider is already assigned to this order
+    if (status === 'out_for_delivery' && order.status === 'confirmed') {
+      if (req.user.role === 'admin' || String(order.rider) === String(req.user._id)) {
+        // allowed
+      } else {
+        return res.status(403).json({ message: 'Only the assigned rider can skip packing' });
+      }
+    }
+
     const allowed = validTransitions[order.status] || [];
     if (!allowed.includes(status)) {
       return res.status(400).json({
@@ -207,12 +216,10 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Optional rider assignment (admin)
     if (req.body.rider) {
       order.rider = req.body.rider;
     }
 
-    // Location updates
     if (status === 'out_for_delivery' && riderLocation) {
       order.pickupLocation = riderLocation;
     }
@@ -234,7 +241,7 @@ exports.updateOrderStatus = async (req, res) => {
     await order.save();
     await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
 
-    // ---------- Push Notifications for status changes ----------
+    // Push notifications for status changes
     if (order.customer) {
       sendPushNotification(
         order.customer,
@@ -293,7 +300,6 @@ exports.assignRider = async (req, res) => {
     await order.save();
     await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
 
-    // Push notification to the newly assigned rider
     if (rider.expoPushToken) {
       sendPushNotification(
         rider.expoPushToken,

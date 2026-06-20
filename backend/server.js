@@ -9,10 +9,10 @@ const http = require('http');
 const socketIo = require('socket.io');
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
-const categoryRoutes = require('./routes/categoryRoutes');
 
 // Make io accessible in routes
 app.set('io', io);
+
 io.on('connection', (socket) => {
   console.log('Socket connected:', socket.id);
 
@@ -23,12 +23,17 @@ io.on('connection', (socket) => {
     console.log(`User ${userId} joined their room`);
   }
 
+  // 👇 NEW: Riders join the global 'riders' room
+  socket.on('joinRiderRoom', () => {
+    socket.join('riders');
+    console.log(`Socket ${socket.id} joined riders room`);
+  });
+
   socket.on('disconnect', () => console.log('Socket disconnected'));
 });
 
 // ---- CORS: Allow all origins for development ----
 app.use(cors());
-
 app.use(express.json());
 
 connectDB();
@@ -46,5 +51,6 @@ app.use('/api/categories', require('./routes/categoryRoutes'));
 
 app.get('/', (req, res) => res.json({ message: 'Groxo API is running' }));
 app.get('/api/rider/dashboard', (req, res) => res.json({ test: true }));
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
