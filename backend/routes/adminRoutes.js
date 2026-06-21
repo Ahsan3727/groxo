@@ -86,26 +86,32 @@ router.get('/customers/locations', protectAdmin, async (req, res) => {
   }
 });
 
-// Wholesalers – this is the ONLY `/wholesalers/locations` route now
+// Wholesalers – returns saved shopLocation (permanent) and falls back to live location
 router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
   try {
     const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
     const data = wholesalers.map(w => {
-      // 1. Saved shop location (drag & drop)
       let location = null;
-      if (w.shopLocation && w.shopLocation.coordinates && w.shopLocation.coordinates.length === 2) {
-        location = {
-          lat: w.shopLocation.coordinates[1],
-          lng: w.shopLocation.coordinates[0],
-          address: w.shopLocation.address || '',
-        };
-      } 
-      // 2. Fallback to live GPS if available
-      else if (w.currentLocation && w.currentLocation.coordinates && w.currentLocation.coordinates.length === 2) {
-        location = {
-          lat: w.currentLocation.coordinates[1],
-          lng: w.currentLocation.coordinates[0],
-        };
+
+      // Saved shop location – use only if it's not the default [0,0]
+      const shop = w.shopLocation;
+      if (shop && shop.coordinates && shop.coordinates.length === 2) {
+        const [lng, lat] = shop.coordinates;
+        if (lat !== 0 || lng !== 0) {           // ← skip if zeros
+          location = {
+            lat,
+            lng,
+            address: shop.address || '',
+          };
+        }
+      }
+
+      // Fallback to live GPS if no valid saved location
+      if (!location && w.currentLocation && w.currentLocation.coordinates && w.currentLocation.coordinates.length === 2) {
+        const [lng, lat] = w.currentLocation.coordinates;
+        if (lat !== 0 || lng !== 0) {
+          location = { lat, lng };
+        }
       }
 
       return {
@@ -116,8 +122,8 @@ router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
         storeName: w.storeName,
         businessLicense: w.businessLicense,
         isActive: w.isActive,
-        shopLocation: w.shopLocation,       // full object (for reference)
-        currentLocation: location,           // what the map will use
+        shopLocation: w.shopLocation,
+        currentLocation: location,        // the one to show on the map
         lastLocationUpdate: w.lastLocationUpdate,
         status: 'wholesaler',
       };
