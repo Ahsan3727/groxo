@@ -13,6 +13,7 @@ const { protectAdmin } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const Banner = require('../models/Banner');
 
 // ---------- Auth / Admin info ----------
 router.post('/login', login);
@@ -24,18 +25,10 @@ router.get('/users', protectAdmin, getUsers);
 router.post('/users', protectAdmin, createUser);
 router.put('/users/:id', protectAdmin, updateUser);
 router.delete('/users/:id', protectAdmin, deleteUser);
-// GET /api/admin/wholesalers/locations
-router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
-  try {
-    // Return full wholesaler documents (minus password) so the map can use shopLocation
-    const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
-    res.json(wholesalers);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 
 // ---------- Location Endpoints (for HubMap) ----------
+
+// Riders
 router.get('/riders/locations', protectAdmin, async (req, res) => {
   try {
     const riders = await User.find({ role: 'rider' }).select('-password');
@@ -58,12 +51,11 @@ router.get('/riders/locations', protectAdmin, async (req, res) => {
   }
 });
 
-// GET /api/admin/customers/locations
+// Customers
 router.get('/customers/locations', protectAdmin, async (req, res) => {
   try {
     const customers = await User.find({ role: 'customer' }).select('-password');
     const data = customers.map(c => {
-      // Use currentLocation if exists, otherwise try address.lat/lng
       let loc = null;
       if (c.currentLocation && c.currentLocation.coordinates && c.currentLocation.coordinates.length === 2) {
         loc = {
@@ -94,23 +86,40 @@ router.get('/customers/locations', protectAdmin, async (req, res) => {
   }
 });
 
+// Wholesalers – NOW INCLUDES shopLocation for the map
 router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
   try {
     const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
-    const data = wholesalers.map(w => ({
-      _id: w._id,
-      name: w.name,
-      email: w.email,
-      phone: w.phone,
-      storeName: w.storeName,
-      businessLicense: w.businessLicense,
-      isActive: w.isActive,
-      currentLocation: w.currentLocation
-        ? { lat: w.currentLocation.coordinates[1], lng: w.currentLocation.coordinates[0] }
-        : null,
-      lastLocationUpdate: w.lastLocationUpdate,
-      status: 'wholesaler',
-    }));
+    const data = wholesalers.map(w => {
+      // Use the saved shop location (permanent) if available, else live location
+      let location = null;
+      if (w.shopLocation && w.shopLocation.coordinates && w.shopLocation.coordinates.length === 2) {
+        location = {
+          lat: w.shopLocation.coordinates[1],
+          lng: w.shopLocation.coordinates[0],
+          address: w.shopLocation.address || '',
+        };
+      } else if (w.currentLocation && w.currentLocation.coordinates && w.currentLocation.coordinates.length === 2) {
+        location = {
+          lat: w.currentLocation.coordinates[1],
+          lng: w.currentLocation.coordinates[0],
+        };
+      }
+
+      return {
+        _id: w._id,
+        name: w.name,
+        email: w.email,
+        phone: w.phone,
+        storeName: w.storeName,
+        businessLicense: w.businessLicense,
+        isActive: w.isActive,
+        shopLocation: w.shopLocation,           // keep the full object for the frontend
+        currentLocation: location,               // the one to show on the map
+        lastLocationUpdate: w.lastLocationUpdate,
+        status: 'wholesaler',
+      };
+    });
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -196,15 +205,13 @@ router.get('/riders', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-const Banner = require('../models/Banner');
 
-// GET /api/admin/banners
+// ---------- Banners ----------
 router.get('/banners', protectAdmin, async (req, res) => {
   const banners = await Banner.find().sort('order');
   res.json(banners);
 });
 
-// POST /api/admin/banners
 router.post('/banners', protectAdmin, async (req, res) => {
   try {
     const { imageUrl, link, isActive, order } = req.body;
@@ -215,7 +222,6 @@ router.post('/banners', protectAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/admin/banners/:id
 router.put('/banners/:id', protectAdmin, async (req, res) => {
   try {
     const banner = await Banner.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -225,7 +231,6 @@ router.put('/banners/:id', protectAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/banners/:id
 router.delete('/banners/:id', protectAdmin, async (req, res) => {
   try {
     await Banner.findByIdAndDelete(req.params.id);
@@ -234,4 +239,5 @@ router.delete('/banners/:id', protectAdmin, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
 module.exports = router;
