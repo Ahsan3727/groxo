@@ -28,11 +28,21 @@ const userSchema = new mongoose.Schema({
   storeAddress: String,
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
+
+  // ---- Live tracking location (real-time) ----
   currentLocation: {
     type: { type: String, default: 'Point' },
     coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
   },
   lastLocationUpdate: Date,
+
+  // ---- Permanent shop location (drag & drop) ----
+  shopLocation: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
+    address: String,
+  },
+  locationSet: { type: Boolean, default: false },
 });
 
 userSchema.pre('save', async function(next) {
