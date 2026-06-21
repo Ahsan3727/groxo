@@ -141,25 +141,16 @@ const HubMap = () => {
       }));
 
       // Process wholesalers: use shopLocation if available, else currentLocation
-      // Process wholesalers: use shopLocation if available, else currentLocation
 const wholesalersData = (wholesalersRes.data || []).map(w => {
   let location = null;
-  if (
-    w.shopLocation?.coordinates &&
-    w.shopLocation.coordinates.length === 2 &&
-    (w.shopLocation.coordinates[0] !== 0 || w.shopLocation.coordinates[1] !== 0)
-  ) {
+  if (w.shopLocation?.coordinates && w.shopLocation.coordinates.length === 2 &&
+      (w.shopLocation.coordinates[0] !== 0 || w.shopLocation.coordinates[1] !== 0)) {
     const [lng, lat] = w.shopLocation.coordinates;
     location = { lat, lng };
   } else if (w.currentLocation?.lat && w.currentLocation?.lng) {
     location = w.currentLocation;
   }
-  return {
-    ...w,
-    type: 'wholesaler',
-    location,
-    status: 'wholesaler',
-  };
+  return { ...w, type: 'wholesaler', location, status: 'wholesaler' };
 });
 
       const allUsers = [...ridersData, ...customersData, ...wholesalersData];

@@ -86,12 +86,12 @@ router.get('/customers/locations', protectAdmin, async (req, res) => {
   }
 });
 
-// Wholesalers – NOW INCLUDES shopLocation for the map
+// Wholesalers – returns saved shopLocation (permanent) and falls back to live location
 router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
   try {
     const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
     const data = wholesalers.map(w => {
-      // Use the saved shop location (permanent) if available, else live location
+      // Use the saved shop location if available and valid
       let location = null;
       if (w.shopLocation && w.shopLocation.coordinates && w.shopLocation.coordinates.length === 2) {
         location = {
@@ -100,6 +100,7 @@ router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
           address: w.shopLocation.address || '',
         };
       } else if (w.currentLocation && w.currentLocation.coordinates && w.currentLocation.coordinates.length === 2) {
+        // Fallback to live GPS location
         location = {
           lat: w.currentLocation.coordinates[1],
           lng: w.currentLocation.coordinates[0],
@@ -114,8 +115,8 @@ router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
         storeName: w.storeName,
         businessLicense: w.businessLicense,
         isActive: w.isActive,
-        shopLocation: w.shopLocation,           // keep the full object for the frontend
-        currentLocation: location,               // the one to show on the map
+        shopLocation: w.shopLocation,       // whole object for the frontend
+        currentLocation: location,           // the one used on the map
         lastLocationUpdate: w.lastLocationUpdate,
         status: 'wholesaler',
       };
