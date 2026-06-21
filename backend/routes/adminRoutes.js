@@ -24,6 +24,16 @@ router.get('/users', protectAdmin, getUsers);
 router.post('/users', protectAdmin, createUser);
 router.put('/users/:id', protectAdmin, updateUser);
 router.delete('/users/:id', protectAdmin, deleteUser);
+// GET /api/admin/wholesalers/locations
+router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
+  try {
+    // Return full wholesaler documents (minus password) so the map can use shopLocation
+    const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
+    res.json(wholesalers);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // ---------- Location Endpoints (for HubMap) ----------
 router.get('/riders/locations', protectAdmin, async (req, res) => {

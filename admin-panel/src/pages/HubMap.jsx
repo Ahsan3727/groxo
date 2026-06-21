@@ -23,21 +23,22 @@ L.Icon.Default.mergeOptions({
 });
 
 // --------------------------------------------------------------------
-// 2. Custom icons based on rider status
+// 2. Custom icons based on user type/status
 // --------------------------------------------------------------------
-const createRiderIcon = (status) => {
+const createRiderIcon = (status, type) => {
   const colors = {
     online: '#4CAF50',
     offline: '#9E9E9E',
     busy: '#FF9800',
     inactive: '#f44336',
     customer: '#2196F3',
-    wholesaler: '#FF9800', // orange
+    wholesaler: '#FF9800',
   };
-  const color = colors[status] || '#9E9E9E';
+  const color = colors[status] || colors[type] || '#9E9E9E';
   let emoji = '🛵';
-  if (status === 'customer') emoji = '🛒';
-  else if (status === 'wholesaler') emoji = '🏭';
+  if (type === 'customer') emoji = '🛒';
+  else if (type === 'wholesaler') emoji = '🏭';
+  else if (status === 'busy') emoji = '🏍️';
 
   return L.divIcon({
     className: 'custom-rider-icon',
@@ -91,80 +92,95 @@ const MapController = ({ center, zoom }) => {
 // --------------------------------------------------------------------
 const HubMap = () => {
   // ---------- State ----------
-  const [riders, setRiders] = useState([]);
-  const [filteredRiders, setFilteredRiders] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedRider, setSelectedRider] = useState(null);
-  const [showRiderModal, setShowRiderModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
 
-  // Map focus
-  const [mapCenter, setMapCenter] = useState([31.72, 72.98]); // Chiniot, Punjab
+  const [mapCenter, setMapCenter] = useState([31.72, 72.98]);
   const [mapZoom, setMapZoom] = useState(14);
 
-  // Auto‑refresh
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(10); // seconds
+  const [refreshInterval, setRefreshInterval] = useState(10);
   const intervalRef = useRef(null);
 
-  // Hub & paths
   const hubLocation = { lat: 31.72, lng: 72.98 };
   const [riderPaths, setRiderPaths] = useState({});
 
   // ---------- Derived safe array for map markers ----------
-  const ridersWithLocation = filteredRiders.filter(
-    (rider) => rider.location?.lat != null && rider.location?.lng != null
+  const usersWithLocation = filteredUsers.filter(
+    (user) => user.location?.lat != null && user.location?.lng != null
   );
 
-  // ---------- Fetch riders from backend ----------
+  // ---------- Fetch all user locations ----------
   const fetchAllLocations = useCallback(async () => {
-  try {
-    const [ridersRes, customersRes, wholesalersRes] = await Promise.all([
-      api.get('/admin/riders/locations'),
-      api.get('/admin/customers/locations'),
-      api.get('/admin/wholesalers/locations'),
-    ]);
+    try {
+      const [ridersRes, customersRes, wholesalersRes] = await Promise.all([
+        api.get('/admin/riders/locations'),
+        api.get('/admin/customers/locations'),
+        api.get('/admin/wholesalers/locations'),
+      ]);
 
-    const ridersData = (ridersRes.data || []).map(r => ({
-      ...r,
-      type: 'rider',
-      location: r.currentLocation || null,
-    }));
-    const customersData = (customersRes.data || []).map(c => ({
-      ...c,
-      type: 'customer',
-      location: c.currentLocation || null,
-      vehicle: { type: 'Customer' },
-      status: 'customer',
-    }));
-    const wholesalersData = (wholesalersRes.data || []).map(w => ({
-      ...w,
-      type: 'wholesaler',
-      location: w.currentLocation || null,
-      vehicle: { type: 'Store' },
-      status: 'wholesaler',
-    }));
+      // Process riders
+      const ridersData = (ridersRes.data || []).map(r => ({
+        ...r,
+        type: 'rider',
+        location: r.currentLocation || null,
+      }));
 
-    const allUsers = [...ridersData, ...customersData, ...wholesalersData];
-    setRiders(allUsers);
-    setFilteredRiders(allUsers);
+      // Process customers
+      const customersData = (customersRes.data || []).map(c => ({
+        ...c,
+        type: 'customer',
+        location: c.currentLocation || null,
+        vehicle: { type: 'Customer' },
+        status: 'customer',
+      }));
 
-    // paths only for riders (optional)
-    const paths = {};
-    allUsers.forEach(user => {
-      if (user.path && user.path.length > 1) {
-        paths[user._id] = user.path.map(p => [p.lat, p.lng]);
-      }
-    });
-    setRiderPaths(paths);
-  } catch (error) {
-    console.error('Fetch locations error', error);
-    toast.error('Could not load locations');
-  } finally {
-    setLoading(false);
+      // Process wholesalers: use shopLocation if available, else currentLocation
+      // Process wholesalers: use shopLocation if available, else currentLocation
+const wholesalersData = (wholesalersRes.data || []).map(w => {
+  let location = null;
+  if (
+    w.shopLocation?.coordinates &&
+    w.shopLocation.coordinates.length === 2 &&
+    (w.shopLocation.coordinates[0] !== 0 || w.shopLocation.coordinates[1] !== 0)
+  ) {
+    const [lng, lat] = w.shopLocation.coordinates;
+    location = { lat, lng };
+  } else if (w.currentLocation?.lat && w.currentLocation?.lng) {
+    location = w.currentLocation;
   }
-}, []);
+  return {
+    ...w,
+    type: 'wholesaler',
+    location,
+    status: 'wholesaler',
+  };
+});
+
+      const allUsers = [...ridersData, ...customersData, ...wholesalersData];
+      setUsers(allUsers);
+      setFilteredUsers(allUsers);
+
+      // Paths only for riders (optional)
+      const paths = {};
+      allUsers.forEach(user => {
+        if (user.path && user.path.length > 1) {
+          paths[user._id] = user.path.map(p => [p.lat, p.lng]);
+        }
+      });
+      setRiderPaths(paths);
+    } catch (error) {
+      console.error('Fetch locations error', error);
+      toast.error('Could not load locations');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // ---------- Initial load & auto‑refresh ----------
   useEffect(() => {
@@ -182,54 +198,55 @@ const HubMap = () => {
 
   // ---------- Filtering ----------
   useEffect(() => {
-    let filtered = [...riders];
+    let filtered = [...users];
 
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filtered = filtered.filter(
-        (r) =>
-          r.name?.toLowerCase().includes(s) ||
-          r.email?.toLowerCase().includes(s) ||
-          (r.vehicle?.plateNumber || '').toLowerCase().includes(s)
+        (u) =>
+          u.name?.toLowerCase().includes(s) ||
+          u.email?.toLowerCase().includes(s) ||
+          (u.vehicle?.plateNumber || '').toLowerCase().includes(s) ||
+          (u.storeName || '').toLowerCase().includes(s)
       );
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((r) => r.status === statusFilter);
+      filtered = filtered.filter((u) => u.status === statusFilter || u.type === statusFilter);
     }
 
-    setFilteredRiders(filtered);
-  }, [searchTerm, statusFilter, riders]);
+    setFilteredUsers(filtered);
+  }, [searchTerm, statusFilter, users]);
 
   // ---------- Handlers ----------
-  const handleRiderClick = (rider) => {
-    if (!rider?.location?.lat) return;
-    setSelectedRider(rider);
-    setMapCenter([rider.location.lat, rider.location.lng]);
+  const handleMarkerClick = (user) => {
+    if (!user?.location?.lat) return;
+    setSelectedUser(user);
+    setMapCenter([user.location.lat, user.location.lng]);
     setMapZoom(16);
-    setShowRiderModal(true);
+    setShowUserModal(true);
   };
 
-  const handleListItemClick = (rider) => {
-    if (!rider?.location?.lat) return;
-    setSelectedRider(rider);
-    setMapCenter([rider.location.lat, rider.location.lng]);
+  const handleListItemClick = (user) => {
+    if (!user?.location?.lat) return;
+    setSelectedUser(user);
+    setMapCenter([user.location.lat, user.location.lng]);
     setMapZoom(16);
   };
 
   // ---------- Helpers ----------
- const statusBadge = (status) => {
-  const map = {
-    online: { bg: 'success', text: 'Online' },
-    offline: { bg: 'secondary', text: 'Offline' },
-    busy: { bg: 'warning', text: 'Busy' },
-    inactive: { bg: 'danger', text: 'Inactive' },
-    customer: { bg: 'info', text: 'Customer' },
-    wholesaler: { bg: 'warning', text: 'Wholesaler' },
+  const statusBadge = (status, type) => {
+    if (type === 'wholesaler') return <Badge bg="warning">Wholesaler</Badge>;
+    if (type === 'customer') return <Badge bg="info">Customer</Badge>;
+    const map = {
+      online: { bg: 'success', text: 'Online' },
+      offline: { bg: 'secondary', text: 'Offline' },
+      busy: { bg: 'warning', text: 'Busy' },
+      inactive: { bg: 'danger', text: 'Inactive' },
+    };
+    const s = map[status] || map.offline;
+    return <Badge bg={s.bg}>{s.text}</Badge>;
   };
-  const s = map[status] || map.offline;
-  return <Badge bg={s.bg}>{s.text}</Badge>;
-};
 
   const formatTime = (dateStr) => {
     if (!dateStr) return 'N/A';
@@ -243,10 +260,11 @@ const HubMap = () => {
   };
 
   // ---------- Stats ----------
-  const onlineCount = riders.filter((r) => r.status === 'online').length;
-  const busyCount = riders.filter((r) => r.status === 'busy').length;
-  const customerCount = riders.filter(r => r.type === 'customer').length;
-  const offlineCount = riders.filter((r) => r.status === 'offline').length;
+  const onlineCount = users.filter(r => r.status === 'online' && r.type === 'rider').length;
+  const busyCount = users.filter(r => r.status === 'busy' && r.type === 'rider').length;
+  const offlineCount = users.filter(r => r.status === 'offline' && r.type === 'rider').length;
+  const customerCount = users.filter(u => u.type === 'customer').length;
+  const wholesalerCount = users.filter(u => u.type === 'wholesaler').length;
 
   // ---------- Loading state ----------
   if (loading) {
@@ -254,7 +272,7 @@ const HubMap = () => {
       <Container fluid className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}>
         <div className="text-center">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
-          <p className="mt-3 text-muted">Loading rider locations...</p>
+          <p className="mt-3 text-muted">Loading locations...</p>
         </div>
       </Container>
     );
@@ -265,7 +283,7 @@ const HubMap = () => {
     <Container fluid className="p-0">
       {/* ----- Stats Bar ----- */}
       <Row className="g-3 mb-3 px-3">
-        <Col md={3}>
+        <Col md={2}>
           <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #4CAF50' }}>
             <Card.Body className="py-2 px-3">
               <small className="text-muted">Online Riders</small>
@@ -273,25 +291,7 @@ const HubMap = () => {
             </Card.Body>
           </Card>
         </Col>
-        <Col md={3}>
-  <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #FF9800' }}>
-    <Card.Body className="py-2 px-3">
-      <small className="text-muted">Wholesalers</small>
-      <h4 className="mb-0 fw-bold text-warning">
-        {riders.filter(r => r.type === 'wholesaler').length}
-      </h4>
-    </Card.Body>
-  </Card>
-</Col>
-          <Col md={3}>
-  <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #2196F3' }}>
-    <Card.Body className="py-2 px-3">
-      <small className="text-muted">Customers</small>
-      <h4 className="mb-0 fw-bold text-info">{customerCount}</h4>
-    </Card.Body>
-  </Card>
-</Col>
-        <Col md={3}>
+        <Col md={2}>
           <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #FF9800' }}>
             <Card.Body className="py-2 px-3">
               <small className="text-muted">Busy (Delivering)</small>
@@ -299,19 +299,27 @@ const HubMap = () => {
             </Card.Body>
           </Card>
         </Col>
-        <Col md={3}>
+        <Col md={2}>
           <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #9E9E9E' }}>
             <Card.Body className="py-2 px-3">
-              <small className="text-muted">Offline</small>
+              <small className="text-muted">Offline Riders</small>
               <h4 className="mb-0 fw-bold text-secondary">{offlineCount}</h4>
             </Card.Body>
           </Card>
         </Col>
-        <Col md={3}>
+        <Col md={2}>
           <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #2196F3' }}>
             <Card.Body className="py-2 px-3">
-              <small className="text-muted">Total Riders</small>
-              <h4 className="mb-0 fw-bold text-primary">{riders.length}</h4>
+              <small className="text-muted">Customers</small>
+              <h4 className="mb-0 fw-bold text-info">{customerCount}</h4>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={2}>
+          <Card className="border-0 shadow-sm" style={{ borderLeft: '4px solid #FF9800' }}>
+            <Card.Body className="py-2 px-3">
+              <small className="text-muted">Wholesalers</small>
+              <h4 className="mb-0 fw-bold text-warning">{wholesalerCount}</h4>
             </Card.Body>
           </Card>
         </Col>
@@ -323,7 +331,7 @@ const HubMap = () => {
           <InputGroup>
             <InputGroup.Text className="bg-white">🔍</InputGroup.Text>
             <Form.Control
-              placeholder="Search rider name, email, vehicle..."
+              placeholder="Search name, email, store..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -331,11 +339,12 @@ const HubMap = () => {
         </Col>
         <Col md={3}>
           <Form.Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="all">All Status</option>
-            <option value="online">🟢 Online</option>
-            <option value="busy">🟠 Busy</option>
-            <option value="offline">⚫ Offline</option>
-            <option value="inactive">🔴 Inactive</option>
+            <option value="all">All Users</option>
+            <option value="online">🟢 Riders Online</option>
+            <option value="busy">🟠 Riders Busy</option>
+            <option value="offline">⚫ Riders Offline</option>
+            <option value="customer">🛒 Customers</option>
+            <option value="wholesaler">🏭 Wholesalers</option>
           </Form.Select>
         </Col>
         <Col md={3}>
@@ -365,40 +374,44 @@ const HubMap = () => {
           <Button variant="outline-primary" onClick={fetchAllLocations}>
             🔄 Refresh
           </Button>
-        </Col> 
+        </Col>
       </Row>
 
       {/* ----- Map & Sidebar ----- */}
       <Row className="px-3" style={{ height: 'calc(100vh - 280px)' }}>
-        {/* Sidebar: Rider List */}
+        {/* Sidebar: User List */}
         <Col md={3}>
           <Card className="border-0 shadow-sm h-100">
             <Card.Header className="bg-white border-bottom">
-              <strong>Riders ({filteredRiders.length})</strong>
+              <strong>Users ({filteredUsers.length})</strong>
             </Card.Header>
             <Card.Body className="p-0 overflow-auto">
               <ListGroup variant="flush">
-                {filteredRiders.length === 0 ? (
-                  <div className="text-center py-4 text-muted">No riders found</div>
+                {filteredUsers.length === 0 ? (
+                  <div className="text-center py-4 text-muted">No users found</div>
                 ) : (
-                  filteredRiders.map((rider) => (
+                  filteredUsers.map((user) => (
                     <ListGroup.Item
-                      key={rider._id}
-                      className={`cursor-pointer ${selectedRider?._id === rider._id ? 'bg-light' : ''}`}
-                      onClick={() => handleListItemClick(rider)}
+                      key={user._id}
+                      className={`cursor-pointer ${selectedUser?._id === user._id ? 'bg-light' : ''}`}
+                      onClick={() => handleListItemClick(user)}
                       style={{ cursor: 'pointer' }}
                     >
                       <div className="d-flex justify-content-between align-items-start">
                         <div>
-                          <div className="fw-bold">{rider.name}</div>
-                          <small className="text-muted">{rider.vehicle?.plateNumber || 'N/A'}</small>
+                          <div className="fw-bold">{user.name}</div>
+                          <small className="text-muted">
+                            {user.type === 'wholesaler' ? user.storeName : user.vehicle?.plateNumber || 'N/A'}
+                          </small>
                         </div>
-                        {statusBadge(rider.status)}
+                        {statusBadge(user.status, user.type)}
                       </div>
                       <div className="d-flex justify-content-between mt-1">
-                        <small className="text-muted">⭐ {rider.rating || 'N/A'}</small>
                         <small className="text-muted">
-                          📍 {rider.lastLocationUpdate ? formatTime(rider.lastLocationUpdate) : 'No data'}
+                          {user.type === 'wholesaler' ? '🏭' : '⭐'} {user.rating || 'N/A'}
+                        </small>
+                        <small className="text-muted">
+                          📍 {user.lastLocationUpdate ? formatTime(user.lastLocationUpdate) : 'No data'}
                         </small>
                       </div>
                     </ListGroup.Item>
@@ -419,7 +432,6 @@ const HubMap = () => {
                 style={{ height: '100%', width: '100%', borderRadius: '8px' }}
                 zoomControl={false}
               >
-                {/* English tile layer (no Urdu) */}
                 <TileLayer
                   url="https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png"
                   attribution='&copy; <a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -437,51 +449,60 @@ const HubMap = () => {
                   </Popup>
                 </Marker>
 
-                {/* Hub Radius (optional visual) */}
+                {/* Hub Radius */}
                 <Circle
                   center={[hubLocation.lat, hubLocation.lng]}
                   radius={2000}
                   pathOptions={{ color: '#2196F3', fillColor: '#2196F3', fillOpacity: 0.1 }}
                 />
 
-                {/* Rider Markers (only those with location) */}
-                {ridersWithLocation.map((rider) => (
-                  <React.Fragment key={rider._id}>
+                {/* User Markers */}
+                {usersWithLocation.map((user) => (
+                  <React.Fragment key={user._id}>
                     <Marker
-                      position={[rider.location.lat, rider.location.lng]}
-                      icon={createRiderIcon(rider.status)}
-                      eventHandlers={{ click: () => handleRiderClick(rider) }}
+                      position={[user.location.lat, user.location.lng]}
+                      icon={createRiderIcon(user.status, user.type)}
+                      eventHandlers={{ click: () => handleMarkerClick(user) }}
                     >
                       <Popup>
                         <div style={{ minWidth: '200px' }}>
-                          <strong>{rider.name}</strong>
-                          <br />
-                          <small>
-                            🛵 {rider.vehicle?.type || 'Vehicle'}
-                            <br />
-                            📋 {rider.vehicle?.plateNumber || 'N/A'}
-                            <br />
-                            📱 {rider.phone}
-                            <br />
-                            ⭐ {rider.rating} | 📦 {rider.totalDeliveries || 0} deliveries
-                            <br />
-                            💰 ₹{rider.earnings?.today || 0} today
-                            <br />
-                            📍 Last update: {rider.lastLocationUpdate
-                              ? new Date(rider.lastLocationUpdate).toLocaleTimeString()
-                              : 'Never'}
-                          </small>
-                          <div className="mt-2">{statusBadge(rider.status)}</div>
+                          <strong>{user.name}</strong>
+                          {user.type === 'wholesaler' ? (
+                            <>
+                              <br />
+                              <small>
+                                🏪 {user.storeName || 'Store'}
+                                {user.shopLocation?.address ? <><br />📍 {user.shopLocation.address}</> : null}
+                                <br />📱 {user.phone}
+                                <br />📧 {user.email}
+                              </small>
+                            </>
+                          ) : (
+                            <>
+                              <br />
+                              <small>
+                                🛵 {user.vehicle?.type || 'Vehicle'}
+                                <br />📋 {user.vehicle?.plateNumber || 'N/A'}
+                                <br />📱 {user.phone}
+                                <br />⭐ {user.rating} | 📦 {user.totalDeliveries || 0} deliveries
+                                <br />💰 ₹{user.earnings?.today || 0} today
+                                <br />📍 Last update: {user.lastLocationUpdate
+                                  ? new Date(user.lastLocationUpdate).toLocaleTimeString()
+                                  : 'Never'}
+                              </small>
+                              <div className="mt-2">{statusBadge(user.status, user.type)}</div>
+                            </>
+                          )}
                         </div>
                       </Popup>
                     </Marker>
 
                     {/* Rider movement path (if available) */}
-                    {riderPaths[rider._id] && riderPaths[rider._id].length > 1 && (
+                    {user.type === 'rider' && riderPaths[user._id] && riderPaths[user._id].length > 1 && (
                       <Polyline
-                        positions={riderPaths[rider._id]}
+                        positions={riderPaths[user._id]}
                         pathOptions={{
-                          color: rider.status === 'online' ? '#4CAF50' : '#FF9800',
+                          color: user.status === 'online' ? '#4CAF50' : '#FF9800',
                           weight: 3,
                           opacity: 0.6,
                           dashArray: '8 4',
@@ -506,14 +527,12 @@ const HubMap = () => {
                   fontSize: '13px',
                 }}
               >
-                <div className="mb-1">
-                  <strong>Legend</strong>
-                </div>
-                <div>🟢 Online</div>
+                <div className="mb-1"><strong>Legend</strong></div>
+                <div>🟢 Online Rider</div>
+                <div>🟠 Busy Rider</div>
+                <div>⚫ Offline Rider</div>
                 <div>🔵 Customer</div>
-                <div>🟠 Busy (Delivering)</div>
-                <div>⚫ Offline</div>
-                <div>🟠 Wholesaler</div>
+                <div>🟠 Wholesaler (Shop)</div>
                 <div>🏪 Hub Location</div>
               </div>
             </Card.Body>
@@ -521,73 +540,114 @@ const HubMap = () => {
         </Col>
       </Row>
 
-      {/* ----- Rider Detail Modal ----- */}
-      <Modal show={showRiderModal} onHide={() => setShowRiderModal(false)} centered>
+      {/* ----- Detail Modal (adapted for any user type) ----- */}
+      <Modal show={showUserModal} onHide={() => setShowUserModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>
-            🛵 {selectedRider?.name}
-            {selectedRider && <span className="ms-2">{statusBadge(selectedRider.status)}</span>}
+            {selectedUser?.type === 'wholesaler' ? '🏭' : selectedUser?.type === 'customer' ? '🛒' : '🛵'}{' '}
+            {selectedUser?.name}
+            <span className="ms-2">{selectedUser && statusBadge(selectedUser.status, selectedUser.type)}</span>
           </Modal.Title>
         </Modal.Header>
-        {selectedRider && (
+        {selectedUser && (
           <Modal.Body>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Email</Col>
-              <Col xs={7}>{selectedRider.email}</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Phone</Col>
-              <Col xs={7}>{selectedRider.phone}</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Vehicle</Col>
-              <Col xs={7}>
-                {selectedRider.vehicle?.type} ({selectedRider.vehicle?.plateNumber})
-              </Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Rating</Col>
-              <Col xs={7}>⭐ {selectedRider.rating} / 5.0</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Total Deliveries</Col>
-              <Col xs={7}>{selectedRider.totalDeliveries || 0}</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Today's Earnings</Col>
-              <Col xs={7}>₹{selectedRider.earnings?.today || 0}</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Last Active</Col>
-              <Col xs={7}>{formatTime(selectedRider.lastActive)}</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col xs={5} className="text-muted">Account Status</Col>
-              <Col xs={7}>
-                <Badge bg={selectedRider.isActive ? 'success' : 'danger'}>
-                  {selectedRider.isActive ? 'Active' : 'Inactive'}
-                </Badge>
-              </Col>
-            </Row>
-            <Row>
-              <Col xs={5} className="text-muted">Current Location</Col>
-              <Col xs={7}>
-                {selectedRider.location?.lat?.toFixed(4)},{' '}
-                {selectedRider.location?.lng?.toFixed(4)}
-              </Col>
-            </Row>
+            {selectedUser.type === 'wholesaler' ? (
+              <>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Store Name</Col>
+                  <Col xs={7}>{selectedUser.storeName || '-'}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Email</Col>
+                  <Col xs={7}>{selectedUser.email}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Phone</Col>
+                  <Col xs={7}>{selectedUser.phone}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Business License</Col>
+                  <Col xs={7}>{selectedUser.businessLicense || '-'}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Shop Address</Col>
+                  <Col xs={7}>{selectedUser.shopLocation?.address || 'Not set'}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Shop Location</Col>
+                  <Col xs={7}>
+                    {selectedUser.location?.lat?.toFixed(4)}, {selectedUser.location?.lng?.toFixed(4)}
+                  </Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Account Status</Col>
+                  <Col xs={7}>
+                    <Badge bg={selectedUser.isActive ? 'success' : 'danger'}>
+                      {selectedUser.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </Col>
+                </Row>
+              </>
+            ) : (
+              // Rider / Customer fields
+              <>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Email</Col>
+                  <Col xs={7}>{selectedUser.email}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Phone</Col>
+                  <Col xs={7}>{selectedUser.phone}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Vehicle</Col>
+                  <Col xs={7}>
+                    {selectedUser.vehicle?.type} ({selectedUser.vehicle?.plateNumber})
+                  </Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Rating</Col>
+                  <Col xs={7}>⭐ {selectedUser.rating} / 5.0</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Total Deliveries</Col>
+                  <Col xs={7}>{selectedUser.totalDeliveries || 0}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Today's Earnings</Col>
+                  <Col xs={7}>₹{selectedUser.earnings?.today || 0}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Last Active</Col>
+                  <Col xs={7}>{formatTime(selectedUser.lastActive)}</Col>
+                </Row>
+                <Row className="mb-2">
+                  <Col xs={5} className="text-muted">Account Status</Col>
+                  <Col xs={7}>
+                    <Badge bg={selectedUser.isActive ? 'success' : 'danger'}>
+                      {selectedUser.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </Col>
+                </Row>
+                <Row>
+                  <Col xs={5} className="text-muted">Current Location</Col>
+                  <Col xs={7}>
+                    {selectedUser.location?.lat?.toFixed(4)},{' '}
+                    {selectedUser.location?.lng?.toFixed(4)}
+                  </Col>
+                </Row>
+              </>
+            )}
           </Modal.Body>
         )}
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowRiderModal(false)}>
-            Close
-          </Button>
+          <Button variant="secondary" onClick={() => setShowUserModal(false)}>Close</Button>
           <Button
             variant="primary"
             onClick={() => {
-              setShowRiderModal(false);
-              if (selectedRider?.location?.lat) {
-                setMapCenter([selectedRider.location.lat, selectedRider.location.lng]);
+              setShowUserModal(false);
+              if (selectedUser?.location?.lat) {
+                setMapCenter([selectedUser.location.lat, selectedUser.location.lng]);
                 setMapZoom(16);
               }
             }}
