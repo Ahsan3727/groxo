@@ -92,5 +92,23 @@ router.get('/dashboard', protect, async (req, res) => {
     rating: 5.0,
   });
 });
+// GET /api/rider/:riderId/location
+router.get('/:riderId/location', protect, async (req, res) => {
+  try {
+    // Only admins or the same rider can access (optional restriction)
+    const rider = await User.findById(req.params.riderId).select('currentLocation');
+    if (!rider) return res.status(404).json({ message: 'Rider not found' });
 
+    const loc = rider.currentLocation;
+    if (loc && loc.coordinates && loc.coordinates.length === 2) {
+      return res.json({
+        lat: loc.coordinates[1],
+        lng: loc.coordinates[0],
+      });
+    }
+    res.json(null); // no location yet
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 module.exports = router;
