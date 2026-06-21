@@ -28,6 +28,22 @@ const orderSchema = new mongoose.Schema({
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true },   // price at time of order
   }],
+    shopLocation: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+    },
+    coordinates: {
+      type: [Number],   // [longitude, latitude]
+      default: [0, 0],
+    },
+    address: String,
+  },
+  locationSet: {
+    type: Boolean,
+    default: false,
+  },
   deliveryAddress: {
     street: String,
     city: String,

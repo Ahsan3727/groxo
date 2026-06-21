@@ -38,4 +38,31 @@ router.put('/:id', protect, async (req, res) => {
   }
 });
 
+// ---------- NEW: Save shop location ----------
+router.put('/location', protect, async (req, res) => {
+  if (req.user.role !== 'wholesaler') {
+    return res.status(403).json({ message: 'Only wholesalers can set shop location' });
+  }
+
+  const { lat, lng, address } = req.body;
+  if (!lat || !lng) {
+    return res.status(400).json({ message: 'Latitude and longitude are required' });
+  }
+
+  try {
+    const user = await User.findById(req.user._id);
+    user.shopLocation = {
+      type: 'Point',
+      coordinates: [lng, lat],
+      address: address || '',
+    };
+    user.locationSet = true;
+    await user.save();
+
+    res.json({ message: 'Shop location saved', shopLocation: user.shopLocation });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
