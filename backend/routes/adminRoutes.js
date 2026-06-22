@@ -27,6 +27,8 @@ router.put('/users/:id', protectAdmin, updateUser);
 router.delete('/users/:id', protectAdmin, deleteUser);
 
 // ---------- Location Endpoints (for HubMap) ----------
+
+// Riders
 router.get('/riders/locations', protectAdmin, async (req, res) => {
   try {
     const riders = await User.find({ role: 'rider' }).select('-password');
@@ -49,6 +51,7 @@ router.get('/riders/locations', protectAdmin, async (req, res) => {
   }
 });
 
+// Customers
 router.get('/customers/locations', protectAdmin, async (req, res) => {
   try {
     const customers = await User.find({ role: 'customer' }).select('-password');
@@ -60,7 +63,10 @@ router.get('/customers/locations', protectAdmin, async (req, res) => {
           lng: c.currentLocation.coordinates[0],
         };
       } else if (c.address && c.address.lat && c.address.lng) {
-        loc = { lat: c.address.lat, lng: c.address.lng };
+        loc = {
+          lat: c.address.lat,
+          lng: c.address.lng,
+        };
       }
       return {
         _id: c._id,
@@ -80,20 +86,34 @@ router.get('/customers/locations', protectAdmin, async (req, res) => {
   }
 });
 
+// Wholesalers – returns saved shopLocation (permanent) and falls back to live location
 router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
   try {
     const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
     const data = wholesalers.map(w => {
       let location = null;
-      if (w.shopLocation && w.shopLocation.coordinates && w.shopLocation.coordinates.length === 2) {
-        location = {
-          lat: w.shopLocation.coordinates[1],
-          lng: w.shopLocation.coordinates[0],
-          address: w.shopLocation.address || '',
-        };
-      } else if (w.currentLocation && w.currentLocation.coordinates && w.currentLocation.coordinates.length === 2) {
-        location = { lat: w.currentLocation.coordinates[1], lng: w.currentLocation.coordinates[0] };
+
+      // Saved shop location – use only if it's not the default [0,0]
+      const shop = w.shopLocation;
+      if (shop && shop.coordinates && shop.coordinates.length === 2) {
+        const [lng, lat] = shop.coordinates;
+        if (lat !== 0 || lng !== 0) {           // ← skip if zeros
+          location = {
+            lat,
+            lng,
+            address: shop.address || '',
+          };
+        }
       }
+
+      // Fallback to live GPS if no valid saved location
+      if (!location && w.currentLocation && w.currentLocation.coordinates && w.currentLocation.coordinates.length === 2) {
+        const [lng, lat] = w.currentLocation.coordinates;
+        if (lat !== 0 || lng !== 0) {
+          location = { lat, lng };
+        }
+      }
+
       return {
         _id: w._id,
         name: w.name,
@@ -103,7 +123,7 @@ router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
         businessLicense: w.businessLicense,
         isActive: w.isActive,
         shopLocation: w.shopLocation,
-        currentLocation: location,
+        currentLocation: location,        // the one to show on the map
         lastLocationUpdate: w.lastLocationUpdate,
         status: 'wholesaler',
       };
@@ -151,8 +171,7 @@ router.get('/orders', protectAdmin, async (req, res) => {
     const filter = status ? { status } : {};
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
-      .populate('wholesaler', 'name storeName')                 // ← old single wholesaler
-      .populate('wholesalerGroups.wholesaler', 'name storeName') // ← new groups
+      .populate('wholesaler', 'name storeName')
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
       .sort('-createdAt');
@@ -161,7 +180,28 @@ router.get('/orders', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// PUT /api/admin/orders/settle-all   – mark all unsettled COD orders as settled
+router.put('/orders/settle-all', protectAdmin, async (req, res) => {
+  try {
+    const { riderId } = req.body;   // optional – settle only for this rider
 
+    const filter = {
+      'payment.method': 'cod',
+      riderSettled: false,
+      status: 'delivered',
+    };
+    if (riderId) filter.rider = riderId;
+
+    const result = await Order.updateMany(filter, { riderSettled: true });
+
+    res.json({
+      message: `Settled ${result.modifiedCount} orders`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 router.put('/orders/:id', protectAdmin, async (req, res) => {
   try {
     const { status, rider } = req.body;
@@ -178,62 +218,17 @@ router.put('/orders/:id', protectAdmin, async (req, res) => {
     });
 
     await order.save();
-    await order.populate([
-      'customer',
-      'wholesalerGroups.wholesaler',
-      'rider',
-      'items.product',
-    ]);
+    await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// ---------- Bulk Settlement ----------
-router.put('/orders/settle-all', protectAdmin, async (req, res) => {
-  try {
-    const { riderId } = req.body;
-    const filter = {
-      'payment.method': 'cod',
-      riderSettled: false,
-      status: 'delivered',
-    };
-    if (riderId) filter.rider = riderId;
-
-    const result = await Order.updateMany(filter, { riderSettled: true });
-    res.json({
-      message: `Settled ${result.modifiedCount} orders`,
-      modifiedCount: result.modifiedCount,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// ---------- Pay wholesaler group ----------
-router.put('/orders/:orderId/pay-wholesaler-group', protectAdmin, async (req, res) => {
-  try {
-    const { groupIndex } = req.body;
-    const order = await Order.findById(req.params.orderId);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (groupIndex < 0 || groupIndex >= order.wholesalerGroups.length) {
-      return res.status(400).json({ message: 'Invalid group index' });
-    }
-
-    order.wholesalerGroups[groupIndex].paid = true;
-    await order.save();
-    res.json({ message: 'Wholesaler marked as paid', order });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// ---------- Riders list ----------
+// ---------- Riders list (for order assignment dropdown) ----------
 router.get('/riders', protectAdmin, async (req, res) => {
   try {
-    const riders = await User.find({ role: 'rider', isActive: true })
-      .select('name email phone vehicle');
+    const riders = await User.find({ role: 'rider', isActive: true }).select('name email phone vehicle');
     res.json(riders);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -271,6 +266,20 @@ router.delete('/banners/:id', protectAdmin, async (req, res) => {
     res.json({ message: 'Banner deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+// PUT /api/admin/orders/:id/settle  – mark rider as settled
+router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    order.riderSettled = true;
+    await order.save();
+
+    res.json({ message: 'Rider marked as settled', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
