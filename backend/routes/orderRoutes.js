@@ -34,14 +34,13 @@ router.get('/available', protect, async (req, res) => {
       .sort({ createdAt: -1 });
 
     // Add a `pickup` field so the rider app can show the store name
-    const mapped = orders.map(order => ({
-      ...order.toObject(),
-      pickup:
-        order.wholesalerGroups?.[0]?.wholesaler?.storeName ||
-        order.wholesalerGroups?.[0]?.storeName ||
-        order.wholesaler?.storeName ||
-        'Store',
-    }));
+    // Inside router.get('/available', ...)
+const mapped = orders.map(order => ({
+  ...order.toObject(),
+  pickup: order.wholesalerGroups?.length > 0
+    ? order.wholesalerGroups.map(g => g.storeName || g.wholesaler?.storeName).join(', ')
+    : (order.wholesaler?.storeName || 'Store'),
+}));
 
     res.json(mapped);
   } catch (error) {

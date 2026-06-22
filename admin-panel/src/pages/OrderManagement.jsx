@@ -296,9 +296,10 @@ const OrderManagement = () => {
             ) : (
               /* Old single-wholesaler order (legacy) */
               <>
-                <h6>Wholesaler</h6>
-                <p>{selectedOrder.wholesaler?.storeName || selectedOrder.wholesaler?.name || 'N/A'}</p>
-                <h6>Items</h6>
+                <Row className="mb-2">
+    <Col><strong>Wholesaler:</strong> {selectedOrder.wholesaler?.storeName || selectedOrder.wholesaler?.name || 'N/A'}</Col>
+  </Row>
+  <h6>Items</h6>
                 <Table size="sm">
                   <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
                   <tbody>
