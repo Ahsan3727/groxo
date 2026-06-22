@@ -8,7 +8,7 @@ const {
   getOrder,
   updateOrderStatus,
   assignRider,
-  updateGroupStatus,
+  updateGroupStatus,          // ← import added
 } = require('../controllers/orderController');
 
 // ---------- CUSTOMER: Place order ----------
@@ -32,11 +32,11 @@ router.get('/available', protect, async (req, res) => {
       .populate('customer', 'name phone deliveryAddress')
       .sort({ createdAt: -1 });
 
-    // Add a `pickup` field for the rider app (first store name)
     const mapped = orders.map(order => ({
       ...order.toObject(),
       pickup: order.wholesalerGroups?.[0]?.wholesaler?.storeName ||
               order.wholesalerGroups?.[0]?.storeName ||
+              order.wholesaler?.storeName ||
               'Store',
     }));
 
@@ -75,7 +75,7 @@ router.put('/:id/accept', protect, async (req, res) => {
 });
 
 // ---------- WHOLESALER: Update own group status ----------
-router.put('/group-status', protect, updateGroupStatus);
+router.put('/group-status', protect, updateGroupStatus);   // ← now defined
 
 // ---------- Get single order ----------
 router.get('/:id', protect, getOrder);

@@ -3,7 +3,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const sendPushNotification = require('../utils/sendPushNotification');
 
-// ---------- Utility: Emit real-time event ----------
+// ---------- Utility: Emit real‑time event ----------
 const emitOrderUpdate = (req, order) => {
   const io = req.app.get('io');
   if (io) {
@@ -11,7 +11,6 @@ const emitOrderUpdate = (req, order) => {
     if (order.customer) io.to(order.customer.toString()).emit('orderUpdated', order);
     if (order.rider) io.to(order.rider.toString()).emit('orderUpdated', order);
 
-    // Support both old single wholesaler and new wholesalerGroups
     if (order.wholesaler) {
       io.to(order.wholesaler.toString()).emit('orderUpdated', order);
     }
@@ -36,7 +35,7 @@ const generateOrderNumber = async () => {
   return orderNumber;
 };
 
-// ---------- CREATE ORDER (unchanged – this already works with old single/multi parent-child) ----------
+// ---------- CREATE ORDER (unchanged – single / parent‑child) ----------
 exports.createOrder = async (req, res) => {
   try {
     const { items, deliveryAddress, payment } = req.body;
@@ -44,7 +43,6 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: 'No items in order' });
     }
 
-    // 1. Lookup all products
     const productIds = items.map(i => i.product);
     const products = await Product.find({ _id: { $in: productIds } });
 
@@ -52,7 +50,6 @@ exports.createOrder = async (req, res) => {
       return res.status(404).json({ message: 'One or more products not found' });
     }
 
-    // Check approvals
     const unapproved = products.filter(p => !p.isApproved);
     if (unapproved.length > 0) {
       return res.status(400).json({
@@ -60,11 +57,9 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Build product map
     const productMap = {};
     products.forEach(p => { productMap[p._id.toString()] = p; });
 
-    // Group items by wholesaler
     const wholesalerItems = {};
     let totalAmount = 0;
 
@@ -86,7 +81,7 @@ exports.createOrder = async (req, res) => {
     const orderNumber = await generateOrderNumber();
     const wholesalerIds = Object.keys(wholesalerItems);
 
-    // ---- SINGLE WHOLESALER (original flow) ----
+    // ---- SINGLE WHOLESALER ----
     if (wholesalerIds.length === 1) {
       const wid = wholesalerIds[0];
       const orderItems = wholesalerItems[wid];
@@ -110,7 +105,6 @@ exports.createOrder = async (req, res) => {
 
       await order.populate(['customer', 'wholesaler', 'items.product']);
 
-      // Notify wholesaler
       const wholesalerUser = await User.findById(wid).select('expoPushToken');
       if (wholesalerUser?.expoPushToken) {
         sendPushNotification(wholesalerUser.expoPushToken, 'New Order Received!',
@@ -127,7 +121,7 @@ exports.createOrder = async (req, res) => {
       return res.status(201).json(order);
     }
 
-    // ---- MULTI WHOLESALER (create parent + child orders) ----
+    // ---- MULTI WHOLESALER (parent + child) ----
     const parentOrder = await Order.create({
       orderNumber,
       customer: req.user._id,
@@ -165,7 +159,6 @@ exports.createOrder = async (req, res) => {
       });
       childOrders.push(childOrder);
 
-      // Notify each wholesaler
       const wholesalerUser = await User.findById(wid).select('expoPushToken');
       if (wholesalerUser?.expoPushToken) {
         sendPushNotification(wholesalerUser.expoPushToken, 'New Order Received!',
@@ -194,7 +187,7 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ---------- GET ORDERS (role-based, updated to support wholesalerGroups) ----------
+// ---------- GET ORDERS (role‑based) ----------
 exports.getOrders = async (req, res) => {
   try {
     const filter = {};
@@ -204,32 +197,27 @@ exports.getOrders = async (req, res) => {
     }
 
     if (req.user.role === 'customer') {
-      // For customer: we return both old standalone orders and parent orders.
-      // The old filter was `filter.parentOrder = null` to exclude child orders (so they don't see duplicates).
-      // We'll keep that for old data.
       filter.customer = req.user._id;
-      filter.parentOrder = null;   // exclude child orders (old parent-child model)
+      filter.parentOrder = null;
     } else if (req.user.role === 'rider') {
       filter.rider = req.user._id;
     } else if (req.user.role === 'wholesaler') {
-      // Match both old single‑wholesaler field and new wholesalerGroups
       filter.$or = [
-        { wholesaler: req.user._id },                    // old model
-        { 'wholesalerGroups.wholesaler': req.user._id }, // new model
+        { wholesaler: req.user._id },
+        { 'wholesalerGroups.wholesaler': req.user._id },
       ];
     }
 
     let orders = await Order.find(filter)
       .populate('customer', 'name email phone')
-      .populate('wholesaler', 'name storeName')                 // for old orders
-      .populate('wholesalerGroups.wholesaler', 'name storeName') // for new orders
+      .populate('wholesaler', 'name storeName')
+      .populate('wholesalerGroups.wholesaler', 'name storeName')
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price image')
       .sort('-createdAt');
 
-    // For customer: attach child orders to parent orders (old parent-child model)
     if (req.user.role === 'customer') {
-      const parentOrders = orders.filter(o => o.items.length === 0); // parent orders have no items
+      const parentOrders = orders.filter(o => o.items.length === 0);
       if (parentOrders.length > 0) {
         const childOrders = await Order.find({
           parentOrder: { $in: parentOrders.map(o => o._id) }
@@ -249,15 +237,12 @@ exports.getOrders = async (req, res) => {
       }
     }
 
-    // For wholesaler: if the order uses the new groups, keep only the matching group(s)
-    // and replace `items` with the group's items so the frontend shows correct data.
     if (req.user.role === 'wholesaler') {
       orders = orders.map(order => {
         if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
           const matchingGroups = order.wholesalerGroups.filter(
             g => g.wholesaler.toString() === req.user._id.toString()
           );
-          // Use items from the first matching group (should be exactly one)
           const items = matchingGroups[0]?.items || [];
           return {
             ...order.toObject(),
@@ -266,7 +251,6 @@ exports.getOrders = async (req, res) => {
             groupTotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
           };
         }
-        // Old orders: already correctly filtered by single wholesaler
         return order;
       });
     }
@@ -294,9 +278,7 @@ exports.getOrder = async (req, res) => {
       const isOwner =
         order.customer?._id?.toString() === req.user._id.toString() ||
         order.rider?._id?.toString() === req.user._id.toString() ||
-        // old single wholesaler
         (order.wholesaler && order.wholesaler._id.toString() === req.user._id.toString()) ||
-        // new groups
         (order.wholesalerGroups && order.wholesalerGroups.some(g => g.wholesaler._id.toString() === req.user._id.toString()));
       if (!isOwner) return res.status(403).json({ message: 'Access denied' });
     }
@@ -315,7 +297,6 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Allowed transitions
     const validTransitions = {
       pending: ['confirmed', 'cancelled'],
       confirmed: ['packing', 'out_for_delivery', 'cancelled'],
@@ -327,7 +308,6 @@ exports.updateOrderStatus = async (req, res) => {
       disputed: [],
     };
 
-    // Special rule: rider can skip packing
     if (status === 'out_for_delivery' && order.status === 'confirmed') {
       if (req.user.role === 'admin' || String(order.rider) === String(req.user._id)) {
         // allowed
@@ -343,16 +323,9 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (req.body.rider) {
-      order.rider = req.body.rider;
-    }
-
-    if (status === 'out_for_delivery' && riderLocation) {
-      order.pickupLocation = riderLocation;
-    }
-    if (riderLocation) {
-      order.riderLocation = riderLocation;
-    }
+    if (req.body.rider) order.rider = req.body.rider;
+    if (status === 'out_for_delivery' && riderLocation) order.pickupLocation = riderLocation;
+    if (riderLocation) order.riderLocation = riderLocation;
 
     order.status = status;
     order.timeline.push({
@@ -360,17 +333,11 @@ exports.updateOrderStatus = async (req, res) => {
       timestamp: new Date(),
       note: note || `Status changed to ${status}`,
     });
-
-    if (status === 'cancelled' && req.body.reason) {
-      order.cancellationReason = req.body.reason;
-    }
-
-    // No automatic earnings calculation
+    if (status === 'cancelled' && req.body.reason) order.cancellationReason = req.body.reason;
 
     await order.save();
     await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
 
-    // Push notifications
     if (order.customer) {
       sendPushNotification(
         order.customer,
@@ -389,7 +356,6 @@ exports.updateOrderStatus = async (req, res) => {
       );
     }
 
-    // Notify wholesaler (old single)
     if (status === 'pending' && order.wholesaler) {
       sendPushNotification(
         order.wholesaler,
@@ -398,7 +364,6 @@ exports.updateOrderStatus = async (req, res) => {
         { orderId: order._id.toString() }
       );
     }
-    // Notify wholesalers in groups (new multi-vendor)
     if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
       for (const group of order.wholesalerGroups) {
         const wholesalerUser = await User.findById(group.wholesaler).select('expoPushToken');
@@ -453,6 +418,37 @@ exports.assignRider = async (req, res) => {
       );
     }
 
+    emitOrderUpdate(req, order);
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ---------- UPDATE WHOLESALER GROUP STATUS (new, for group‑based orders) ----------
+exports.updateGroupStatus = async (req, res) => {
+  try {
+    const { orderId, groupIndex, status } = req.body;
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    if (!order.wholesalerGroups || order.wholesalerGroups.length === 0) {
+      return res.status(400).json({ message: 'This order does not use wholesaler groups' });
+    }
+    if (groupIndex < 0 || groupIndex >= order.wholesalerGroups.length) {
+      return res.status(400).json({ message: 'Invalid group index' });
+    }
+
+    const group = order.wholesalerGroups[groupIndex];
+    group.status = status;
+    if (status === 'ready_for_pickup') group.packedAt = new Date();
+
+    // Update overall order status if all groups are ready
+    const allReady = order.wholesalerGroups.every(g => g.status === 'ready_for_pickup');
+    order.status = allReady ? 'ready_for_pickup' : 'packing';
+
+    await order.save();
+    await order.populate(['customer', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
     emitOrderUpdate(req, order);
     res.json(order);
   } catch (error) {
