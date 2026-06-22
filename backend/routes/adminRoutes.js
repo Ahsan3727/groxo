@@ -144,14 +144,14 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
   }
 });
 
-// ---------- Order Management (UPDATED) ----------
+// ---------- Order Management ----------
 router.get('/orders', protectAdmin, async (req, res) => {
   try {
     const { status } = req.query;
     const filter = status ? { status } : {};
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
-      .populate('wholesalerGroups.wholesaler', 'name storeName')   // ← FIXED: populate groups
+      .populate('wholesalerGroups.wholesaler', 'name storeName')   // ← groups
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
       .sort('-createdAt');
@@ -189,7 +189,7 @@ router.put('/orders/:id', protectAdmin, async (req, res) => {
   }
 });
 
-// ---------- Bulk COD settlement ----------
+// ---------- Bulk Settlement ----------
 router.put('/orders/settle-all', protectAdmin, async (req, res) => {
   try {
     const { riderId } = req.body;
@@ -228,7 +228,7 @@ router.put('/orders/:orderId/pay-wholesaler-group', protectAdmin, async (req, re
   }
 });
 
-// ---------- Riders list (for order assignment) ----------
+// ---------- Riders list ----------
 router.get('/riders', protectAdmin, async (req, res) => {
   try {
     const riders = await User.find({ role: 'rider', isActive: true })
