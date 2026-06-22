@@ -8,13 +8,13 @@ const {
   getOrder,
   updateOrderStatus,
   assignRider,
-  updateGroupStatus,          // ← new import
+  updateGroupStatus,          // ← import for group‑status endpoint
 } = require('../controllers/orderController');
 
 // ---------- CUSTOMER: Place order ----------
 router.post('/', protect, createOrder);
 
-// ---------- ADMIN / WHOLESALER / RIDER: Get orders (role‑based) ----------
+// ---------- ADMIN / WHOLESALER / RIDER: Get orders ----------
 router.get('/', protect, getOrders);
 
 // ---------- RIDER: Get available (unassigned) orders ----------
@@ -33,14 +33,18 @@ router.get('/available', protect, async (req, res) => {
       .populate('customer', 'name phone deliveryAddress')
       .sort({ createdAt: -1 });
 
-    // Add a `pickup` field so the rider app can show the store name
-    // Inside router.get('/available', ...)
-const mapped = orders.map(order => ({
-  ...order.toObject(),
-  pickup: order.wholesalerGroups?.length > 0
-    ? order.wholesalerGroups.map(g => g.storeName || g.wholesaler?.storeName).join(', ')
-    : (order.wholesaler?.storeName || 'Store'),
-}));
+    // Build a clear pickup label for the rider
+    const mapped = orders.map(order => {
+      let pickup = 'Store';
+      if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
+        pickup = order.wholesalerGroups
+          .map(g => g.storeName || g.wholesaler?.storeName || 'Store')
+          .join(', ');
+      } else if (order.wholesaler) {
+        pickup = order.wholesaler.storeName || order.wholesaler.name || 'Store';
+      }
+      return { ...order.toObject(), pickup };
+    });
 
     res.json(mapped);
   } catch (error) {
@@ -65,12 +69,17 @@ router.put('/:id/accept', protect, async (req, res) => {
       note: `Accepted by rider ${req.user.name}`,
     });
     await order.save();
-    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
+    // Populate both old and new wholesaler fields so the rider sees names
+    await order.populate([
+      'customer',
+      'wholesaler',               // old single wholesaler
+      'wholesalerGroups.wholesaler', // new groups
+      'rider',
+      'items.product',
+    ]);
 
     const io = req.app.get('io');
-    if (io) {
-      io.emit('orderUpdated', order);
-    }
+    if (io) io.emit('orderUpdated', order);
 
     res.json(order);
   } catch (error) {
