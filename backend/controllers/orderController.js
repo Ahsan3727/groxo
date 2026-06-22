@@ -198,7 +198,18 @@ exports.updateOrderStatus = async (req, res) => {
       cancelled: [],
       disputed: [],
     };
+// Calculate earnings when order is delivered
+if (status === 'delivered') {
+  const commissionRate = 0.10;   // 10% platform commission – can be moved to a config
+  const productTotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const deliveryFee = order.deliveryFee || 100;   // default Rs.100 if not set
+  const commission = Math.round(productTotal * commissionRate);
 
+  order.wholesalerEarning = productTotal - commission;
+  order.riderEarning = deliveryFee;
+  order.platformCommission = commission;
+  order.codAmount = order.payment.method === 'cod' ? order.payment.amount : 0;
+}
     // Special rule: rider can go directly from 'confirmed' to 'out_for_delivery'
     // ONLY if the rider is already assigned to this order
     if (status === 'out_for_delivery' && order.status === 'confirmed') {

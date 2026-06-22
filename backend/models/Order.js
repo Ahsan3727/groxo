@@ -1,6 +1,13 @@
 ﻿const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
+  // Add these to the existing schema (do not remove anything)
+codAmount: { type: Number, default: 0 },
+riderEarning: { type: Number, default: 0 },
+wholesalerEarning: { type: Number, default: 0 },
+platformCommission: { type: Number, default: 0 },
+riderSettled: { type: Boolean, default: false },
+wholesalerPaid: { type: Boolean, default: false },
   customer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

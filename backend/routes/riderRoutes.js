@@ -84,13 +84,42 @@ router.get('/dashboard', protect, async (req, res) => {
   if (req.user.role !== 'rider') {
     return res.status(403).json({ message: 'Rider access only' });
   }
-  res.json({
-    todayEarnings: 0,
-    weekEarnings: 0,
-    monthEarnings: 0,
-    totalDeliveries: 0,
-    rating: 5.0,
-  });
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // All delivered orders for this rider
+    const orders = await Order.find({
+      rider: req.user._id,
+      status: 'delivered',
+    });
+
+    const todayOrders = orders.filter(o => o.createdAt >= today && o.createdAt < tomorrow);
+
+    // Today's deliveries count
+    const todayDeliveries = todayOrders.length;
+
+    // Unsettled COD: total codAmount of orders not yet handed over
+    const unsettledCOD = orders
+      .filter(o => o.payment?.method === 'cod' && !o.riderSettled)
+      .reduce((sum, o) => sum + (o.codAmount || 0), 0);
+
+    // Settled COD: total codAmount already handed over
+    const settledCOD = orders
+      .filter(o => o.payment?.method === 'cod' && o.riderSettled)
+      .reduce((sum, o) => sum + (o.codAmount || 0), 0);
+
+    res.json({
+      todayDeliveries,
+      unsettledCOD,
+      settledCOD,
+      totalDeliveries: orders.length,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 // GET /api/rider/:riderId/location
 router.get('/:riderId/location', protect, async (req, res) => {
