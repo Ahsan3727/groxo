@@ -82,7 +82,7 @@ exports.createOrder = async (req, res) => {
         groupMap[wid] = {
           wholesaler: product.wholesaler,
           // 👇 Use storeName, fallback to name, fallback to 'Store'
-          storeName: product.wholesaler?.storeName || product.wholesaler?.name || 'Store',
+    storeName: product.wholesaler.name,   // ← use name, not storeName
           items: [],
         };
       }
