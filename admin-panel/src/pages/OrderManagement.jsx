@@ -84,18 +84,19 @@ const OrderManagement = () => {
 
   // ---------- Bulk Settlement ----------
   const settleAllCOD = async () => {
-    if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
-    setSettlingAll(true);
-    try {
-      const { data } = await api.put('/admin/orders/settle-all', {});
-      toast.success(data.message);
-      fetchOrders();   // refresh to reflect changes
-    } catch (error) {
-      toast.error('Bulk settlement failed');
-    } finally {
-      setSettlingAll(false);
-    }
-  };
+  if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
+  setSettlingAll(true);
+  try {
+    const { data } = await api.put('/admin/orders/settle-all', {});
+    toast.success(data.message);   // e.g., "Settled 5 orders"
+    fetchOrders();
+  } catch (error) {
+    const msg = error.response?.data?.message || 'Bulk settlement failed';
+    toast.error(msg);   // shows the real error from the backend
+  } finally {
+    setSettlingAll(false);
+  }
+};
 
   return (
     <Container fluid>

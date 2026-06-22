@@ -180,7 +180,28 @@ router.get('/orders', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// PUT /api/admin/orders/settle-all   – mark all unsettled COD orders as settled
+router.put('/orders/settle-all', protectAdmin, async (req, res) => {
+  try {
+    const { riderId } = req.body;   // optional – settle only for this rider
 
+    const filter = {
+      'payment.method': 'cod',
+      riderSettled: false,
+      status: 'delivered',
+    };
+    if (riderId) filter.rider = riderId;
+
+    const result = await Order.updateMany(filter, { riderSettled: true });
+
+    res.json({
+      message: `Settled ${result.modifiedCount} orders`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 router.put('/orders/:id', protectAdmin, async (req, res) => {
   try {
     const { status, rider } = req.body;
@@ -261,26 +282,5 @@ router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-// PUT /api/admin/orders/settle-all   – mark all unsettled COD orders as settled
-router.put('/orders/settle-all', protectAdmin, async (req, res) => {
-  try {
-    const { riderId } = req.body;   // optional – settle only for this rider
 
-    const filter = {
-      'payment.method': 'cod',
-      riderSettled: false,
-      status: 'delivered',
-    };
-    if (riderId) filter.rider = riderId;
-
-    const result = await Order.updateMany(filter, { riderSettled: true });
-
-    res.json({
-      message: `Settled ${result.modifiedCount} orders`,
-      modifiedCount: result.modifiedCount,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 module.exports = router;
