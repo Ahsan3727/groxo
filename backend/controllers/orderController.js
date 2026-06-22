@@ -10,7 +10,6 @@ const emitOrderUpdate = (req, order) => {
     io.emit('orderUpdated', order);
     if (order.customer) io.to(order.customer.toString()).emit('orderUpdated', order);
     if (order.rider) io.to(order.rider.toString()).emit('orderUpdated', order);
-    // Notify each wholesaler via group (or legacy single)
     if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
       order.wholesalerGroups.forEach(g => {
         if (g.wholesaler) io.to(g.wholesaler.toString()).emit('orderUpdated', order);
@@ -54,7 +53,6 @@ exports.createOrder = async (req, res) => {
     const productMap = {};
     products.forEach(p => { productMap[p._id.toString()] = p; });
 
-    // Build groups
     const groupMap = {};
     let totalAmount = 0;
     const allItems = [];
@@ -95,14 +93,12 @@ exports.createOrder = async (req, res) => {
       status: 'confirmed',
       confirmedByAdmin: true,
       timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
-      // no legacy fields needed
     });
 
     await order.populate('customer');
     await order.populate('wholesalerGroups.wholesaler', 'storeName name');
     await order.populate('items.product', 'name price');
 
-    // Notify each wholesaler
     for (const group of wholesalerGroups) {
       const wholesalerUser = await User.findById(group.wholesaler).select('expoPushToken');
       if (wholesalerUser?.expoPushToken) {
@@ -125,7 +121,7 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ─── GET ORDERS (works with old & new) ───
+// ─── GET ORDERS (fixed customer 500) ───
 exports.getOrders = async (req, res) => {
   try {
     const filter = {};
@@ -136,7 +132,6 @@ exports.getOrders = async (req, res) => {
     } else if (req.user.role === 'rider') {
       filter.rider = req.user._id;
     } else if (req.user.role === 'wholesaler') {
-      // Match both old and new format
       filter.$or = [
         { 'wholesalerGroups.wholesaler': req.user._id },
         { wholesaler: req.user._id },
@@ -153,12 +148,10 @@ exports.getOrders = async (req, res) => {
     // For wholesaler: return only their own items / groups
     if (req.user.role === 'wholesaler') {
       orders = orders.map(order => {
-        // New format: filter groups and replace items
         if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
           const matchingGroups = order.wholesalerGroups.filter(
             g => g.wholesaler.toString() === req.user._id.toString()
           );
-          // Use items from the first matching group (should be exactly one)
           const items = matchingGroups[0]?.items || [];
           return {
             ...order.toObject(),
@@ -167,32 +160,16 @@ exports.getOrders = async (req, res) => {
             groupTotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
           };
         }
-        // Old format: already scoped by wholesaler
-        return order;
+        return order;   // old order – already scoped by wholesaler
       });
     }
 
-    // For customer: attach child orders? Not needed with new model (single order)
-    // but we keep old logic if any parent/child orders still exist.
-    if (req.user.role === 'customer') {
-      const parentOrders = orders.filter(o => o.items && o.items.length === 0);
-      if (parentOrders.length > 0) {
-        const childOrders = await Order.find({
-          parentOrder: { $in: parentOrders.map(o => o._id) }
-        }).populate('wholesaler', 'name storeName')
-          .populate('items.product', 'name price');
-        orders = orders.map(order => {
-          if (order.items.length === 0) {
-            const children = childOrders.filter(c => c.parentOrder.toString() === order._id.toString());
-            return { ...order.toObject(), childOrders: children };
-          }
-          return order;
-        });
-      }
-    }
+    // For customer: remove old parent‑child logic, just return all orders as-is
+    // (new model never creates parent/child orders, and old ones are migrated)
 
     res.json(orders);
   } catch (error) {
+    console.error('GET ORDERS ERROR:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -223,7 +200,7 @@ exports.getOrder = async (req, res) => {
   }
 };
 
-// ─── UPDATE GROUP STATUS (wholesaler updates own group in new orders) ───
+// ─── UPDATE GROUP STATUS ───
 exports.updateGroupStatus = async (req, res) => {
   try {
     const { orderId, groupIndex, status } = req.body;
@@ -253,14 +230,13 @@ exports.updateGroupStatus = async (req, res) => {
   }
 };
 
-// ─── UPDATE OVERALL ORDER STATUS (rider/admin, works with both) ───
+// ─── UPDATE OVERALL ORDER STATUS (rider/admin) ───
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status, note, riderLocation } = req.body;
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Allowed transitions (same as before)
     const validTransitions = {
       pending: ['confirmed', 'cancelled'],
       confirmed: ['packing', 'out_for_delivery', 'cancelled'],
@@ -293,7 +269,6 @@ exports.updateOrderStatus = async (req, res) => {
     await order.save();
     await order.populate(['customer', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
 
-    // Push notifications (customer always)
     if (order.customer) {
       sendPushNotification(order.customer, 'Order Update',
         `Your order is now ${status.replace(/_/g, ' ')}`,
@@ -312,7 +287,7 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// ─── ADMIN: ASSIGN RIDER (unchanged) ───
+// ─── ADMIN: ASSIGN RIDER ───
 exports.assignRider = async (req, res) => {
   try {
     const { riderId } = req.body;
