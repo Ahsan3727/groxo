@@ -43,14 +43,13 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: 'No items in order' });
     }
 
-    // Look up all products
     const productIds = items.map(i => i.product);
     const products = await Product.find({ _id: { $in: productIds } });
+
     if (products.length !== productIds.length) {
       return res.status(404).json({ message: 'One or more products not found' });
     }
 
-    // Check approvals
     const unapproved = products.filter(p => !p.isApproved);
     if (unapproved.length > 0) {
       return res.status(400).json({
@@ -58,7 +57,6 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Build product map
     const productMap = {};
     products.forEach(p => { productMap[p._id.toString()] = p; });
 
@@ -83,7 +81,8 @@ exports.createOrder = async (req, res) => {
       if (!groupMap[wid]) {
         groupMap[wid] = {
           wholesaler: product.wholesaler,
-          storeName: product.wholesaler?.storeName || 'Store',
+          // 👇 Use storeName, fallback to name, fallback to 'Store'
+          storeName: product.wholesaler?.storeName || product.wholesaler?.name || 'Store',
           items: [],
         };
       }
@@ -96,7 +95,6 @@ exports.createOrder = async (req, res) => {
 
     const wholesalerGroups = Object.values(groupMap);
     const orderNumber = await generateOrderNumber();
-    console.log('Generated orderNumber:', orderNumber);
 
     const order = await Order.create({
       orderNumber,
@@ -133,6 +131,7 @@ exports.createOrder = async (req, res) => {
         );
       }
     }
+
     const io = req.app.get('io');
     if (io) {
       io.emit('orderUpdated', order);
