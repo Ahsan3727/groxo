@@ -111,4 +111,53 @@ router.get('/:riderId/location', protect, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// GET /api/rider/dashboard
+router.get('/dashboard', protect, async (req, res) => {
+  if (req.user.role !== 'rider') {
+    return res.status(403).json({ message: 'Rider access only' });
+  }
+
+  try {
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Fetch all delivered orders for this rider
+    const orders = await Order.find({
+      rider: req.user._id,
+      status: 'delivered',
+    });
+
+    // Today's orders
+    const todayOrders = orders.filter(o => o.createdAt >= today && o.createdAt < tomorrow);
+
+    // Today's earnings (delivery fees)
+    const todayEarnings = todayOrders.reduce((sum, o) => sum + (o.riderEarning || 0), 0);
+
+    // Completed deliveries today
+    const todayDeliveries = todayOrders.length;
+
+    // COD balance: total collected but not yet settled
+    const unsettledCOD = orders
+      .filter(o => o.payment?.method === 'cod' && !o.riderSettled)
+      .reduce((sum, o) => sum + (o.codAmount || 0), 0);
+
+    // COD settled: total already handed over
+    const settledCOD = orders
+      .filter(o => o.payment?.method === 'cod' && o.riderSettled)
+      .reduce((sum, o) => sum + (o.codAmount || 0), 0);
+
+    res.json({
+      todayEarnings,
+      todayDeliveries,
+      unsettledCOD,
+      settledCOD,
+      totalDeliveries: orders.length,   // lifetime deliveries
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 module.exports = router;
