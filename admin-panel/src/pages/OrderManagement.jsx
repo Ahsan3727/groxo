@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
   Container, Row, Col, Card, Table, Button, Badge,
-  Modal, Form,
+  Modal, Form, Spinner,
 } from 'react-bootstrap';
 import api from '../services/api';
 import { toast } from 'react-toastify';
@@ -25,6 +25,7 @@ const OrderManagement = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [riders, setRiders] = useState([]);
   const [assignRiderId, setAssignRiderId] = useState('');
+  const [settlingAll, setSettlingAll] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -81,6 +82,21 @@ const OrderManagement = () => {
     setShowModal(true);
   };
 
+  // ---------- Bulk Settlement ----------
+  const settleAllCOD = async () => {
+    if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
+    setSettlingAll(true);
+    try {
+      const { data } = await api.put('/admin/orders/settle-all', {});
+      toast.success(data.message);
+      fetchOrders();   // refresh to reflect changes
+    } catch (error) {
+      toast.error('Bulk settlement failed');
+    } finally {
+      setSettlingAll(false);
+    }
+  };
+
   return (
     <Container fluid>
       <Row className="mb-3 align-items-center">
@@ -101,6 +117,15 @@ const OrderManagement = () => {
             <option value="delivered">Delivered</option>
             <option value="cancelled">Cancelled</option>
           </Form.Select>
+        </Col>
+        <Col md="auto">
+          <Button
+            variant="success"
+            onClick={settleAllCOD}
+            disabled={settlingAll}
+          >
+            {settlingAll ? <Spinner size="sm" animation="border" /> : '💵 Settle All COD'}
+          </Button>
         </Col>
       </Row>
 
@@ -132,7 +157,7 @@ const OrderManagement = () => {
                       <td>{order.customer?.name || 'N/A'}</td>
                       <td>{order.wholesaler?.storeName || order.wholesaler?.name || 'N/A'}</td>
                       <td>{order.rider?.name || 'Unassigned'}</td>
-                      <td>₹{order.payment?.amount || 0}</td>
+                      <td>Rs. {order.payment?.amount || 0}</td>
                       <td>
                         <Badge bg={statusColors[order.status] || 'secondary'}>
                           {order.status?.replace(/_/g, ' ')}
@@ -186,7 +211,7 @@ const OrderManagement = () => {
         </Card.Body>
       </Card>
 
-      {/* Order Detail Modal */}
+      {/* Order Detail Modal (unchanged) */}
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Order #{selectedOrder?._id?.slice(-6)}</Modal.Title>
@@ -205,7 +230,7 @@ const OrderManagement = () => {
               <Col md={6}>
                 <strong>Wholesaler:</strong> {selectedOrder.wholesaler?.storeName || 'N/A'}<br />
                 <strong>Rider:</strong> {selectedOrder.rider?.name || 'Unassigned'}<br />
-                <strong>Amount:</strong> ₹{selectedOrder.payment?.amount}
+                <strong>Amount:</strong> Rs. {selectedOrder.payment?.amount}
               </Col>
             </Row>
 
@@ -217,7 +242,7 @@ const OrderManagement = () => {
                   <tr key={i}>
                     <td>{item.product?.name || 'Product'}</td>
                     <td>{item.quantity}</td>
-                    <td>₹{item.price}</td>
+                    <td>Rs. {item.price}</td>
                   </tr>
                 ))}
               </tbody>
