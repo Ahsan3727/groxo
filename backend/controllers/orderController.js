@@ -3,36 +3,34 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const sendPushNotification = require('../utils/sendPushNotification');
 
-// ---------- Utility: Emit real‑time event ----------
+// ─── Helpers ─────────────────────────────────────
 const emitOrderUpdate = (req, order) => {
   const io = req.app.get('io');
   if (io) {
     io.emit('orderUpdated', order);
     if (order.customer) io.to(order.customer.toString()).emit('orderUpdated', order);
     if (order.rider) io.to(order.rider.toString()).emit('orderUpdated', order);
-    // Notify every wholesaler in the groups
-    if (order.wholesalerGroups) {
-      order.wholesalerGroups.forEach(group => {
-        if (group.wholesaler) {
-          io.to(group.wholesaler.toString()).emit('orderUpdated', order);
-        }
+    // Notify each wholesaler via group (or legacy single)
+    if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
+      order.wholesalerGroups.forEach(g => {
+        if (g.wholesaler) io.to(g.wholesaler.toString()).emit('orderUpdated', order);
       });
+    } else if (order.wholesaler) {
+      io.to(order.wholesaler.toString()).emit('orderUpdated', order);
     }
   }
 };
 
-// ---------- Utility: Unique order number ----------
 const generateOrderNumber = async () => {
   const date = new Date();
   const datePart = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
   const random = Math.floor(1000 + Math.random() * 9000);
   const orderNumber = `ORD-${datePart}-${random}`;
-  const exists = await Order.findOne({ orderNumber });
-  if (exists) return generateOrderNumber();
+  if (await Order.findOne({ orderNumber })) return generateOrderNumber();
   return orderNumber;
 };
 
-// ---------- CREATE ORDER (single order with wholesalerGroups) ----------
+// ─── CREATE ORDER (new orders always use wholesalerGroups) ───
 exports.createOrder = async (req, res) => {
   try {
     const { items, deliveryAddress, payment } = req.body;
@@ -42,7 +40,6 @@ exports.createOrder = async (req, res) => {
 
     const productIds = items.map(i => i.product);
     const products = await Product.find({ _id: { $in: productIds } });
-
     if (products.length !== productIds.length) {
       return res.status(404).json({ message: 'One or more products not found' });
     }
@@ -57,7 +54,7 @@ exports.createOrder = async (req, res) => {
     const productMap = {};
     products.forEach(p => { productMap[p._id.toString()] = p; });
 
-    // Group items by wholesaler
+    // Build groups
     const groupMap = {};
     let totalAmount = 0;
     const allItems = [];
@@ -68,11 +65,7 @@ exports.createOrder = async (req, res) => {
       const qty = item.quantity || 1;
       totalAmount += price * qty;
 
-      allItems.push({
-        product: product._id,
-        quantity: qty,
-        price,
-      });
+      allItems.push({ product: product._id, quantity: qty, price });
 
       const wid = product.wholesaler.toString();
       if (!groupMap[wid]) {
@@ -82,11 +75,7 @@ exports.createOrder = async (req, res) => {
           items: [],
         };
       }
-      groupMap[wid].items.push({
-        product: product._id,
-        quantity: qty,
-        price,
-      });
+      groupMap[wid].items.push({ product: product._id, quantity: qty, price });
     }
 
     const wholesalerGroups = Object.values(groupMap);
@@ -106,6 +95,7 @@ exports.createOrder = async (req, res) => {
       status: 'confirmed',
       confirmedByAdmin: true,
       timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
+      // no legacy fields needed
     });
 
     await order.populate('customer');
@@ -116,12 +106,9 @@ exports.createOrder = async (req, res) => {
     for (const group of wholesalerGroups) {
       const wholesalerUser = await User.findById(group.wholesaler).select('expoPushToken');
       if (wholesalerUser?.expoPushToken) {
-        sendPushNotification(
-          wholesalerUser.expoPushToken,
-          'New Order Received!',
+        sendPushNotification(wholesalerUser.expoPushToken, 'New Order Received!',
           `You have a new order #${order.orderNumber}. Tap to view.`,
-          { type: 'new_order', orderId: order._id.toString() }
-        );
+          { type: 'new_order', orderId: order._id.toString() });
       }
     }
 
@@ -138,21 +125,22 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ---------- GET ORDERS (role‑based) ----------
+// ─── GET ORDERS (works with old & new) ───
 exports.getOrders = async (req, res) => {
   try {
     const filter = {};
-
-    if (req.query.status) {
-      filter.status = req.query.status;
-    }
+    if (req.query.status) filter.status = req.query.status;
 
     if (req.user.role === 'customer') {
       filter.customer = req.user._id;
     } else if (req.user.role === 'rider') {
       filter.rider = req.user._id;
     } else if (req.user.role === 'wholesaler') {
-      filter['wholesalerGroups.wholesaler'] = req.user._id;
+      // Match both old and new format
+      filter.$or = [
+        { 'wholesalerGroups.wholesaler': req.user._id },
+        { wholesaler: req.user._id },
+      ];
     }
 
     let orders = await Order.find(filter)
@@ -162,14 +150,45 @@ exports.getOrders = async (req, res) => {
       .populate('items.product', 'name price image')
       .sort('-createdAt');
 
-    // For wholesaler: return only the matching group(s)
+    // For wholesaler: return only their own items / groups
     if (req.user.role === 'wholesaler') {
       orders = orders.map(order => {
-        const groups = order.wholesalerGroups.filter(
-          g => g.wholesaler.toString() === req.user._id.toString()
-        );
-        return { ...order.toObject(), wholesalerGroups: groups };
+        // New format: filter groups and replace items
+        if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
+          const matchingGroups = order.wholesalerGroups.filter(
+            g => g.wholesaler.toString() === req.user._id.toString()
+          );
+          // Use items from the first matching group (should be exactly one)
+          const items = matchingGroups[0]?.items || [];
+          return {
+            ...order.toObject(),
+            items,
+            wholesalerGroups: matchingGroups,
+            groupTotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+          };
+        }
+        // Old format: already scoped by wholesaler
+        return order;
       });
+    }
+
+    // For customer: attach child orders? Not needed with new model (single order)
+    // but we keep old logic if any parent/child orders still exist.
+    if (req.user.role === 'customer') {
+      const parentOrders = orders.filter(o => o.items && o.items.length === 0);
+      if (parentOrders.length > 0) {
+        const childOrders = await Order.find({
+          parentOrder: { $in: parentOrders.map(o => o._id) }
+        }).populate('wholesaler', 'name storeName')
+          .populate('items.product', 'name price');
+        orders = orders.map(order => {
+          if (order.items.length === 0) {
+            const children = childOrders.filter(c => c.parentOrder.toString() === order._id.toString());
+            return { ...order.toObject(), childOrders: children };
+          }
+          return order;
+        });
+      }
     }
 
     res.json(orders);
@@ -178,7 +197,7 @@ exports.getOrders = async (req, res) => {
   }
 };
 
-// ---------- GET SINGLE ORDER ----------
+// ─── GET SINGLE ORDER ───
 exports.getOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
@@ -193,7 +212,8 @@ exports.getOrder = async (req, res) => {
       const isOwner =
         order.customer?._id?.toString() === req.user._id.toString() ||
         order.rider?._id?.toString() === req.user._id.toString() ||
-        order.wholesalerGroups.some(g => g.wholesaler._id.toString() === req.user._id.toString());
+        (order.wholesalerGroups && order.wholesalerGroups.some(g => g.wholesaler._id.toString() === req.user._id.toString())) ||
+        (order.wholesaler && order.wholesaler._id.toString() === req.user._id.toString());
       if (!isOwner) return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -203,13 +223,16 @@ exports.getOrder = async (req, res) => {
   }
 };
 
-// ---------- UPDATE WHOLESALER GROUP STATUS ----------
+// ─── UPDATE GROUP STATUS (wholesaler updates own group in new orders) ───
 exports.updateGroupStatus = async (req, res) => {
   try {
     const { orderId, groupIndex, status } = req.body;
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
+    if (!order.wholesalerGroups || order.wholesalerGroups.length === 0) {
+      return res.status(400).json({ message: 'This order does not use wholesaler groups' });
+    }
     if (groupIndex < 0 || groupIndex >= order.wholesalerGroups.length) {
       return res.status(400).json({ message: 'Invalid group index' });
     }
@@ -218,7 +241,6 @@ exports.updateGroupStatus = async (req, res) => {
     group.status = status;
     if (status === 'ready_for_pickup') group.packedAt = new Date();
 
-    // Update overall order status based on all groups
     const allReady = order.wholesalerGroups.every(g => g.status === 'ready_for_pickup');
     order.status = allReady ? 'ready_for_pickup' : 'packing';
 
@@ -231,16 +253,16 @@ exports.updateGroupStatus = async (req, res) => {
   }
 };
 
-// ---------- UPDATE ORDER STATUS (overall, for rider / admin) ----------
+// ─── UPDATE OVERALL ORDER STATUS (rider/admin, works with both) ───
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status, note, riderLocation } = req.body;
     const order = await Order.findById(req.params.id);
-
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Allowed transitions (simplified)
+    // Allowed transitions (same as before)
     const validTransitions = {
+      pending: ['confirmed', 'cancelled'],
       confirmed: ['packing', 'out_for_delivery', 'cancelled'],
       packing: ['ready_for_pickup', 'cancelled'],
       ready_for_pickup: ['out_for_delivery', 'cancelled'],
@@ -266,29 +288,21 @@ exports.updateOrderStatus = async (req, res) => {
       timestamp: new Date(),
       note: note || `Status changed to ${status}`,
     });
-
     if (status === 'cancelled' && req.body.reason) order.cancellationReason = req.body.reason;
 
     await order.save();
     await order.populate(['customer', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
 
-    // Push notifications
+    // Push notifications (customer always)
     if (order.customer) {
-      sendPushNotification(
-        order.customer,
-        'Order Update',
+      sendPushNotification(order.customer, 'Order Update',
         `Your order is now ${status.replace(/_/g, ' ')}`,
-        { orderId: order._id.toString(), status }
-      );
+        { orderId: order._id.toString(), status });
     }
-
     if (status === 'confirmed' && order.rider) {
-      sendPushNotification(
-        order.rider,
-        'New Delivery',
+      sendPushNotification(order.rider, 'New Delivery',
         'You have been assigned a new order!',
-        { orderId: order._id.toString() }
-      );
+        { orderId: order._id.toString() });
     }
 
     emitOrderUpdate(req, order);
@@ -298,12 +312,11 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// ---------- ADMIN: ASSIGN RIDER ----------
+// ─── ADMIN: ASSIGN RIDER (unchanged) ───
 exports.assignRider = async (req, res) => {
   try {
     const { riderId } = req.body;
     const order = await Order.findById(req.params.id);
-
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     const rider = await User.findById(riderId);
@@ -323,12 +336,9 @@ exports.assignRider = async (req, res) => {
     await order.populate(['customer', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
 
     if (rider.expoPushToken) {
-      sendPushNotification(
-        rider.expoPushToken,
-        'New Delivery',
+      sendPushNotification(rider.expoPushToken, 'New Delivery',
         'You have been assigned a new order!',
-        { orderId: order._id.toString() }
-      );
+        { orderId: order._id.toString() });
     }
 
     emitOrderUpdate(req, order);

@@ -152,7 +152,7 @@ const OrderManagement = () => {
                 <tr>
                   <th>Order ID</th>
                   <th>Customer</th>
-                  <th>Wholesaler(s)</th>
+                  <th>Wholesaler(s)</th>           {/* column header */}
                   <th>Rider</th>
                   <th>Amount</th>
                   <th>Status</th>
@@ -169,7 +169,10 @@ const OrderManagement = () => {
                       <td><small>#{order._id?.slice(-6)}</small></td>
                       <td>{order.customer?.name || 'N/A'}</td>
                       <td>
-                        {order.wholesalerGroups?.map(g => g.storeName || g.wholesaler?.name).join(', ') || 'N/A'}
+                        {/* FIXED: show storeNames from wholesalerGroups */}
+                        {order.wholesalerGroups
+                          ?.map(g => g.storeName || g.wholesaler?.name)
+                          .join(', ') || 'N/A'}
                       </td>
                       <td>{order.rider?.name || 'Unassigned'}</td>
                       <td>Rs. {order.payment?.amount || 0}</td>
@@ -226,7 +229,7 @@ const OrderManagement = () => {
         </Card.Body>
       </Card>
 
-      {/* Order Detail Modal */}
+      {/* Order Detail Modal (unchanged) */}
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Order #{selectedOrder?._id?.slice(-6)}</Modal.Title>

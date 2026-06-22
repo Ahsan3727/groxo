@@ -11,21 +11,18 @@ const orderSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
   },
-  rider: {
+  // ─── Legacy fields (still used by old orders) ───
+  wholesaler: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
-  // All items in the order (for customer view / rider summary)
-  items: [{
-    product: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Product',
-      required: true,
-    },
-    quantity: { type: Number, required: true, min: 1 },
-    price: { type: Number, required: true },
-  }],
-  // Wholesaler groups – each group represents one wholesaler’s part
+  packingStatus: {
+    type: String,
+    enum: ['pending', 'packing', 'ready'],
+  },
+  wholesalerPaid: { type: Boolean, default: false },
+
+  // ─── New multi‑vendor groups ───
   wholesalerGroups: [{
     wholesaler: {
       type: mongoose.Schema.Types.ObjectId,
@@ -44,7 +41,22 @@ const orderSchema = new mongoose.Schema({
       default: 'packing',
     },
     packedAt: Date,
-    paid: { type: Boolean, default: false },   // admin marks true after paying this wholesaler
+    paid: { type: Boolean, default: false },
+  }],
+
+  // ─── Rider / delivery fields (unchanged) ───
+  rider: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  items: [{
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+      required: true,
+    },
+    quantity: { type: Number, required: true, min: 1 },
+    price: { type: Number, required: true },
   }],
   deliveryAddress: {
     street: String,
@@ -59,8 +71,8 @@ const orderSchema = new mongoose.Schema({
     enum: [
       'pending',
       'confirmed',
-      'packing',           // at least one group still packing
-      'ready_for_pickup',  // all groups ready
+      'packing',
+      'ready_for_pickup',
       'out_for_delivery',
       'delivered',
       'cancelled',
@@ -68,10 +80,7 @@ const orderSchema = new mongoose.Schema({
     ],
     default: 'pending',
   },
-  confirmedByAdmin: {
-    type: Boolean,
-    default: false,
-  },
+  confirmedByAdmin: { type: Boolean, default: false },
   payment: {
     method: { type: String, enum: ['cod', 'online'], default: 'cod' },
     amount: Number,
@@ -84,22 +93,13 @@ const orderSchema = new mongoose.Schema({
     note: String,
   }],
   cancellationReason: String,
-  riderLocation: {
-    lat: Number,
-    lng: Number,
-  },
-  pickupLocation: {
-    lat: Number,
-    lng: Number,
-  },
-  // Money fields (optional, for manual tracking)
+  riderLocation: { lat: Number, lng: Number },
+  pickupLocation: { lat: Number, lng: Number },
   codAmount: { type: Number, default: 0 },
   riderEarning: { type: Number, default: 0 },
   wholesalerEarning: { type: Number, default: 0 },
   platformCommission: { type: Number, default: 0 },
   riderSettled: { type: Boolean, default: false },
-}, {
-  timestamps: true,
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);
