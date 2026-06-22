@@ -133,8 +133,6 @@ exports.createOrder = async (req, res) => {
         );
       }
     }
-
-    // Emit socket events
     const io = req.app.get('io');
     if (io) {
       io.emit('orderUpdated', order);
