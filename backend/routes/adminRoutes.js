@@ -216,6 +216,23 @@ router.put('/orders/:id/pay-wholesaler', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// PUT /api/admin/orders/:orderId/pay-wholesaler-group
+router.put('/orders/:orderId/pay-wholesaler-group', protectAdmin, async (req, res) => {
+  try {
+    const { groupIndex } = req.body;
+    const order = await Order.findById(req.params.orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (groupIndex < 0 || groupIndex >= order.wholesalerGroups.length) {
+      return res.status(400).json({ message: 'Invalid group index' });
+    }
+
+    order.wholesalerGroups[groupIndex].paid = true;
+    await order.save();
+    res.json({ message: 'Wholesaler marked as paid', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 router.put('/orders/:id', protectAdmin, async (req, res) => {
   try {
     const { status, rider } = req.body;

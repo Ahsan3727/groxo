@@ -77,5 +77,4 @@ router.put('/:id/status', protect, updateOrderStatus);
 
 // ---------- Admin: assign rider ----------
 router.put('/:id/assign', protect, assignRider);
-
 module.exports = router;
