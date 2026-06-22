@@ -202,6 +202,20 @@ router.put('/orders/settle-all', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// PUT /api/admin/orders/:id/pay-wholesaler  – mark wholesaler as paid
+router.put('/orders/:id/pay-wholesaler', protectAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    order.wholesalerPaid = true;
+    await order.save();
+
+    res.json({ message: 'Wholesaler marked as paid', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 router.put('/orders/:id', protectAdmin, async (req, res) => {
   try {
     const { status, rider } = req.body;
@@ -268,6 +282,7 @@ router.delete('/banners/:id', protectAdmin, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
 // PUT /api/admin/orders/:id/settle  – mark rider as settled
 router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
   try {

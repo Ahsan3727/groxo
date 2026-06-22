@@ -25,106 +25,165 @@ const generateOrderNumber = async () => {
   return orderNumber;
 };
 
-// ---------- CREATE ORDER ----------
+// ---------- CREATE ORDER (with multi‑vendor splitting) ----------
 exports.createOrder = async (req, res) => {
   try {
     const { items, deliveryAddress, payment } = req.body;
-    console.log('Create order request received:', JSON.stringify(req.body));
-
     if (!items || items.length === 0) {
       return res.status(400).json({ message: 'No items in order' });
     }
 
-    let totalAmount = 0;
-    const orderItems = [];
-    let wholesalerId = null;
+    // 1. Lookup all products
+    const productIds = items.map(i => i.product);
+    const products = await Product.find({ _id: { $in: productIds } });
 
-    for (const item of items) {
-      console.log('Looking up product:', item.product);
-      const product = await Product.findById(item.product);
-      if (!product) {
-        console.log('Product not found:', item.product);
-        return res.status(404).json({ message: `Product ${item.product} not found` });
-      }
-      if (!product.isApproved) {
-        console.log('Product not approved:', product.name);
-        return res.status(400).json({ message: `${product.name} is not approved yet` });
-      }
-
-      const price = product.adminPrice || product.price;
-      orderItems.push({
-        product: product._id,
-        quantity: item.quantity || 1,
-        price: price,
-      });
-      totalAmount += price * (item.quantity || 1);
-
-      if (!wholesalerId && product.wholesaler) {
-        wholesalerId = product.wholesaler;
-        console.log('Wholesaler set from product:', wholesalerId);
-      }
+    if (products.length !== productIds.length) {
+      return res.status(404).json({ message: 'One or more products not found' });
     }
 
-    if (!wholesalerId) {
-      console.log('No wholesaler found for order items');
-      return res.status(400).json({ message: 'Could not determine wholesaler from products' });
+    // Check approvals
+    const unapproved = products.filter(p => !p.isApproved);
+    if (unapproved.length > 0) {
+      return res.status(400).json({
+        message: `Product(s) not approved: ${unapproved.map(p => p.name).join(', ')}`,
+      });
+    }
+
+    // Build product map
+    const productMap = {};
+    products.forEach(p => { productMap[p._id.toString()] = p; });
+
+    // Group items by wholesaler
+    const wholesalerItems = {};
+    let totalAmount = 0;
+
+    for (const item of items) {
+      const product = productMap[item.product.toString()];
+      const price = product.adminPrice || product.price;
+      const qty = item.quantity || 1;
+      totalAmount += price * qty;
+
+      const wid = product.wholesaler.toString();
+      if (!wholesalerItems[wid]) wholesalerItems[wid] = [];
+      wholesalerItems[wid].push({
+        product: product._id,
+        quantity: qty,
+        price,
+      });
     }
 
     const orderNumber = await generateOrderNumber();
-    console.log('Generated orderNumber:', orderNumber);
+    const wholesalerIds = Object.keys(wholesalerItems);
 
-    const order = await Order.create({
+    // ---- SINGLE WHOLESALER (original flow) ----
+    if (wholesalerIds.length === 1) {
+      const wid = wholesalerIds[0];
+      const orderItems = wholesalerItems[wid];
+
+      const order = await Order.create({
+        orderNumber,
+        customer: req.user._id,
+        wholesaler: wid,
+        items: orderItems,
+        deliveryAddress: deliveryAddress || {},
+        payment: {
+          method: payment?.method || 'cod',
+          amount: totalAmount,
+          status: 'pending',
+        },
+        status: 'confirmed',
+        packingStatus: 'pending',
+        confirmedByAdmin: true,
+        timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
+      });
+
+      await order.populate(['customer', 'wholesaler', 'items.product']);
+
+      // Notify wholesaler
+      const wholesalerUser = await User.findById(wid).select('expoPushToken');
+      if (wholesalerUser?.expoPushToken) {
+        sendPushNotification(wholesalerUser.expoPushToken, 'New Order Received!',
+          `You have a new order #${order.orderNumber}. Tap to view.`,
+          { type: 'new_order', orderId: order._id.toString() });
+      }
+
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('orderUpdated', order);
+        io.to('riders').emit('newAvailableOrder', order);
+      }
+
+      return res.status(201).json(order);
+    }
+
+    // ---- MULTI WHOLESALER (create parent + child orders) ----
+    const parentOrder = await Order.create({
       orderNumber,
       customer: req.user._id,
-      wholesaler: wholesalerId,
-      items: orderItems,
+      items: [],
       deliveryAddress: deliveryAddress || {},
       payment: {
         method: payment?.method || 'cod',
         amount: totalAmount,
         status: 'pending',
       },
-      status: 'confirmed',              // auto-confirmed
+      status: 'confirmed',
       packingStatus: 'pending',
       confirmedByAdmin: true,
-      timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
+      timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and split' }],
     });
 
-    console.log('Order created:', order._id);
+    const childOrders = [];
+    for (const wid of wholesalerIds) {
+      const childOrder = await Order.create({
+        orderNumber: `${orderNumber}-${wid.slice(-4)}`,
+        customer: req.user._id,
+        wholesaler: wid,
+        items: wholesalerItems[wid],
+        deliveryAddress: deliveryAddress || {},
+        payment: {
+          method: payment?.method || 'cod',
+          amount: wholesalerItems[wid].reduce((sum, i) => sum + i.price * i.quantity, 0),
+          status: 'pending',
+        },
+        status: 'confirmed',
+        packingStatus: 'pending',
+        confirmedByAdmin: true,
+        parentOrder: parentOrder._id,
+        timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
+      });
+      childOrders.push(childOrder);
 
-    await order.populate(['customer', 'wholesaler', 'items.product']);
-
-    // ---------- Push notification to wholesaler ----------
-    try {
-      const wholesalerUser = await User.findById(wholesalerId).select('expoPushToken');
-      if (wholesalerUser && wholesalerUser.expoPushToken) {
-        sendPushNotification(
-          wholesalerUser.expoPushToken,
-          'New Order Received!',
-          `You have a new order #${order.orderNumber}. Tap to view.`,
-          { type: 'new_order', orderId: order._id.toString() }
-        );
+      // Notify each wholesaler
+      const wholesalerUser = await User.findById(wid).select('expoPushToken');
+      if (wholesalerUser?.expoPushToken) {
+        sendPushNotification(wholesalerUser.expoPushToken, 'New Order Received!',
+          `You have a new order #${childOrder.orderNumber}. Tap to view.`,
+          { type: 'new_order', orderId: childOrder._id.toString() });
       }
-    } catch (notifErr) {
-      console.error('Wholesaler push notification failed:', notifErr.message);
     }
 
-    // ---------- Emit socket events ----------
     const io = req.app.get('io');
     if (io) {
-      io.emit('orderUpdated', order);                  // general broadcast
-      io.to('riders').emit('newAvailableOrder', order); // notify all online riders
+      io.emit('orderUpdated', parentOrder);
+      io.to('riders').emit('newAvailableOrder', parentOrder);
+      for (const child of childOrders) {
+        io.emit('orderUpdated', child);
+        io.to('riders').emit('newAvailableOrder', child);
+      }
     }
 
-    res.status(201).json(order);
+    res.status(201).json({
+      ...parentOrder.toObject(),
+      childOrders,
+    });
   } catch (error) {
-    console.error('CREATE ORDER ERROR:', error.message);
-    console.error('FULL ERROR:', error);
+    console.error('CREATE ORDER ERROR:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// ---------- GET ORDERS (role-based) ----------
+// ---------- GET ORDERS (role-based, with customer improvement) ----------
 exports.getOrders = async (req, res) => {
   try {
     const filter = {};
@@ -135,18 +194,41 @@ exports.getOrders = async (req, res) => {
 
     if (req.user.role === 'customer') {
       filter.customer = req.user._id;
+      filter.parentOrder = null;   // only parents/standalone
     } else if (req.user.role === 'rider') {
       filter.rider = req.user._id;
     } else if (req.user.role === 'wholesaler') {
       filter.wholesaler = req.user._id;
     }
 
-    const orders = await Order.find(filter)
+    let orders = await Order.find(filter)
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price image')
       .sort('-createdAt');
+
+    // For customers, attach child orders to parent orders
+    if (req.user.role === 'customer') {
+      const parentOrders = orders.filter(o => o.items.length === 0);
+      if (parentOrders.length > 0) {
+        const childOrders = await Order.find({
+          parentOrder: { $in: parentOrders.map(o => o._id) }
+        })
+          .populate('wholesaler', 'name storeName')
+          .populate('items.product', 'name price');
+
+        orders = orders.map(order => {
+          if (order.items.length === 0) {
+            const children = childOrders.filter(
+              c => c.parentOrder.toString() === order._id.toString()
+            );
+            return { ...order.toObject(), childOrders: children };
+          }
+          return order;
+        });
+      }
+    }
 
     res.json(orders);
   } catch (error) {
@@ -187,7 +269,7 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Allowed transitions (rider can skip packing)
+    // Allowed transitions
     const validTransitions = {
       pending: ['confirmed', 'cancelled'],
       confirmed: ['packing', 'out_for_delivery', 'cancelled'],
@@ -199,7 +281,7 @@ exports.updateOrderStatus = async (req, res) => {
       disputed: [],
     };
 
-    // Special rule: rider can go directly from 'confirmed' to 'out_for_delivery'
+    // Special rule: rider can skip packing
     if (status === 'out_for_delivery' && order.status === 'confirmed') {
       if (req.user.role === 'admin' || String(order.rider) === String(req.user._id)) {
         // allowed
@@ -237,14 +319,12 @@ exports.updateOrderStatus = async (req, res) => {
       order.cancellationReason = req.body.reason;
     }
 
-    // *** No automatic earnings calculation here ***
-    // All money fields (wholesalerEarning, riderEarning, codAmount) remain 0
-    // They will be managed manually by the admin
+    // No automatic earnings calculation
 
     await order.save();
     await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
 
-    // Push notifications for status changes
+    // Push notifications
     if (order.customer) {
       sendPushNotification(
         order.customer,

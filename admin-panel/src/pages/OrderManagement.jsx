@@ -82,21 +82,33 @@ const OrderManagement = () => {
     setShowModal(true);
   };
 
-  // ---------- Bulk Settlement ----------
+  // Bulk settle all COD
   const settleAllCOD = async () => {
-  if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
-  setSettlingAll(true);
-  try {
-    const { data } = await api.put('/admin/orders/settle-all', {});
-    toast.success(data.message);   // e.g., "Settled 5 orders"
-    fetchOrders();
-  } catch (error) {
-    const msg = error.response?.data?.message || 'Bulk settlement failed';
-    toast.error(msg);   // shows the real error from the backend
-  } finally {
-    setSettlingAll(false);
-  }
-};
+    if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
+    setSettlingAll(true);
+    try {
+      const { data } = await api.put('/admin/orders/settle-all', {});
+      toast.success(data.message);
+      fetchOrders();
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Bulk settlement failed';
+      toast.error(msg);
+    } finally {
+      setSettlingAll(false);
+    }
+  };
+
+  // Mark wholesaler as paid
+  const markWholesalerPaid = async (orderId) => {
+    try {
+      await api.put(`/admin/orders/${orderId}/pay-wholesaler`);
+      toast.success('Wholesaler marked as paid');
+      setShowModal(false);
+      fetchOrders();
+    } catch (error) {
+      toast.error('Failed to mark wholesaler as paid');
+    }
+  };
 
   return (
     <Container fluid>
@@ -212,7 +224,7 @@ const OrderManagement = () => {
         </Card.Body>
       </Card>
 
-      {/* Order Detail Modal (unchanged) */}
+      {/* Order Detail Modal */}
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Order #{selectedOrder?._id?.slice(-6)}</Modal.Title>
@@ -279,6 +291,29 @@ const OrderManagement = () => {
                 </Button>
               </Col>
             </Row>
+
+            {/* Mark Wholesaler Paid – only for delivered, unpaid orders */}
+            {selectedOrder.status === 'delivered' && !selectedOrder.wholesalerPaid && (
+              <Row className="mt-3">
+                <Col>
+                  <Button
+                    variant="warning"
+                    onClick={() => markWholesalerPaid(selectedOrder._id)}
+                  >
+                    ✅ Mark Wholesaler Paid
+                  </Button>
+                </Col>
+              </Row>
+            )}
+
+            {/* Optional: show already paid status */}
+            {selectedOrder.wholesalerPaid && (
+              <Row className="mt-3">
+                <Col>
+                  <Badge bg="success">Wholesaler Paid</Badge>
+                </Col>
+              </Row>
+            )}
           </Modal.Body>
         )}
       </Modal>
