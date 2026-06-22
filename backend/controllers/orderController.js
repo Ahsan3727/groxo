@@ -74,21 +74,21 @@ exports.createOrder = async (req, res) => {
     console.log('Generated orderNumber:', orderNumber);
 
     const order = await Order.create({
-  orderNumber,
-  customer: req.user._id,
-  wholesaler: wholesalerId,
-  items: orderItems,
-  deliveryAddress: deliveryAddress || {},
-  payment: {
-    method: payment?.method || 'cod',
-    amount: totalAmount,
-    status: 'pending',
-  },
-  status: 'confirmed',              // ← was 'pending'
-  packingStatus: 'pending',
-  confirmedByAdmin: true,           // ← auto-confirmed
-  timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
-});
+      orderNumber,
+      customer: req.user._id,
+      wholesaler: wholesalerId,
+      items: orderItems,
+      deliveryAddress: deliveryAddress || {},
+      payment: {
+        method: payment?.method || 'cod',
+        amount: totalAmount,
+        status: 'pending',
+      },
+      status: 'confirmed',              // auto-confirmed
+      packingStatus: 'pending',
+      confirmedByAdmin: true,
+      timeline: [{ status: 'confirmed', timestamp: new Date(), note: 'Order placed and confirmed' }],
+    });
 
     console.log('Order created:', order._id);
 
@@ -187,10 +187,10 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // Allowed transitions
+    // Allowed transitions (rider can skip packing)
     const validTransitions = {
       pending: ['confirmed', 'cancelled'],
-      confirmed: ['packing', 'out_for_delivery', 'cancelled'], // ← rider can skip packing
+      confirmed: ['packing', 'out_for_delivery', 'cancelled'],
       packing: ['ready_for_pickup', 'cancelled'],
       ready_for_pickup: ['out_for_delivery', 'cancelled'],
       out_for_delivery: ['delivered', 'disputed'],
@@ -198,20 +198,8 @@ exports.updateOrderStatus = async (req, res) => {
       cancelled: [],
       disputed: [],
     };
-// Calculate earnings when order is delivered
-if (status === 'delivered') {
-  const commissionRate = 0.10;   // 10% platform commission – can be moved to a config
-  const productTotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = order.deliveryFee || 100;   // default Rs.100 if not set
-  const commission = Math.round(productTotal * commissionRate);
 
-  order.wholesalerEarning = productTotal - commission;
-  order.riderEarning = deliveryFee;
-  order.platformCommission = commission;
-  order.codAmount = order.payment.method === 'cod' ? order.payment.amount : 0;
-}
     // Special rule: rider can go directly from 'confirmed' to 'out_for_delivery'
-    // ONLY if the rider is already assigned to this order
     if (status === 'out_for_delivery' && order.status === 'confirmed') {
       if (req.user.role === 'admin' || String(order.rider) === String(req.user._id)) {
         // allowed
@@ -248,6 +236,10 @@ if (status === 'delivered') {
     if (status === 'cancelled' && req.body.reason) {
       order.cancellationReason = req.body.reason;
     }
+
+    // *** No automatic earnings calculation here ***
+    // All money fields (wholesalerEarning, riderEarning, codAmount) remain 0
+    // They will be managed manually by the admin
 
     await order.save();
     await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
