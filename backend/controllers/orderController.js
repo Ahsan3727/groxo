@@ -187,7 +187,6 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ---------- GET ORDERS (role‑based) ----------
 exports.getOrders = async (req, res) => {
   try {
     const filter = {};
@@ -198,7 +197,7 @@ exports.getOrders = async (req, res) => {
 
     if (req.user.role === 'customer') {
       filter.customer = req.user._id;
-      filter.parentOrder = null;   // exclude child orders (old parent‑child model)
+      filter.parentOrder = null;   // keep original behaviour
     } else if (req.user.role === 'rider') {
       filter.rider = req.user._id;
     } else if (req.user.role === 'wholesaler') {
@@ -216,10 +215,9 @@ exports.getOrders = async (req, res) => {
       .populate('items.product', 'name price image')
       .sort('-createdAt');
 
-    // For customer: attach child orders to parent orders (safely)
+    // Customer branch: attach child orders (original logic, safe)
     if (req.user.role === 'customer') {
-      // parentOrders have items.length === 0 (old model) — add safety check
-      const parentOrders = orders.filter(o => Array.isArray(o.items) && o.items.length === 0);
+      const parentOrders = orders.filter(o => o.items && o.items.length === 0);
       if (parentOrders.length > 0) {
         const childOrders = await Order.find({
           parentOrder: { $in: parentOrders.map(o => o._id) }
@@ -228,7 +226,7 @@ exports.getOrders = async (req, res) => {
           .populate('items.product', 'name price');
 
         orders = orders.map(order => {
-          if (Array.isArray(order.items) && order.items.length === 0) {
+          if (order.items && order.items.length === 0) {
             const children = childOrders.filter(
               c => c.parentOrder.toString() === order._id.toString()
             );
@@ -239,7 +237,7 @@ exports.getOrders = async (req, res) => {
       }
     }
 
-    // For wholesaler: keep only the matching group(s)
+    // Wholesaler branch: keep only matching group(s)
     if (req.user.role === 'wholesaler') {
       orders = orders.map(order => {
         if (order.wholesalerGroups && order.wholesalerGroups.length > 0) {
