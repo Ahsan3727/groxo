@@ -172,6 +172,7 @@ router.get('/orders', protectAdmin, async (req, res) => {
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
+      .populate('wholesalerGroups.wholesaler', 'name storeName')   // <-- added for new model
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
       .sort('-createdAt');
@@ -180,6 +181,7 @@ router.get('/orders', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 // PUT /api/admin/orders/settle-all   – mark all unsettled COD orders as settled
 router.put('/orders/settle-all', protectAdmin, async (req, res) => {
   try {
@@ -202,6 +204,8 @@ router.put('/orders/settle-all', protectAdmin, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+// PUT /api/admin/orders/:id  (update order status / assign rider)
 router.put('/orders/:id', protectAdmin, async (req, res) => {
   try {
     const { status, rider } = req.body;
@@ -218,8 +222,41 @@ router.put('/orders/:id', protectAdmin, async (req, res) => {
     });
 
     await order.save();
-    await order.populate(['customer', 'wholesaler', 'rider', 'items.product']);
+    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
     res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/orders/:id/settle  – mark rider as settled (old single order)
+router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    order.riderSettled = true;
+    await order.save();
+
+    res.json({ message: 'Rider marked as settled', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PUT /api/admin/orders/:orderId/pay-wholesaler-group  – pay a specific group (new)
+router.put('/orders/:orderId/pay-wholesaler-group', protectAdmin, async (req, res) => {
+  try {
+    const { groupIndex } = req.body;
+    const order = await Order.findById(req.params.orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (groupIndex < 0 || groupIndex >= order.wholesalerGroups.length) {
+      return res.status(400).json({ message: 'Invalid group index' });
+    }
+
+    order.wholesalerGroups[groupIndex].paid = true;
+    await order.save();
+    res.json({ message: 'Wholesaler marked as paid', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -266,20 +303,6 @@ router.delete('/banners/:id', protectAdmin, async (req, res) => {
     res.json({ message: 'Banner deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
-  }
-});
-// PUT /api/admin/orders/:id/settle  – mark rider as settled
-router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-
-    order.riderSettled = true;
-    await order.save();
-
-    res.json({ message: 'Rider marked as settled', order });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 });
 

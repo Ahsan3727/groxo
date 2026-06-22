@@ -82,21 +82,33 @@ const OrderManagement = () => {
     setShowModal(true);
   };
 
-  // ---------- Bulk Settlement ----------
+  // Bulk Settlement
   const settleAllCOD = async () => {
-  if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
-  setSettlingAll(true);
-  try {
-    const { data } = await api.put('/admin/orders/settle-all', {});
-    toast.success(data.message);   // e.g., "Settled 5 orders"
-    fetchOrders();
-  } catch (error) {
-    const msg = error.response?.data?.message || 'Bulk settlement failed';
-    toast.error(msg);   // shows the real error from the backend
-  } finally {
-    setSettlingAll(false);
-  }
-};
+    if (!window.confirm('Mark ALL unsettled COD orders (all riders) as settled?')) return;
+    setSettlingAll(true);
+    try {
+      const { data } = await api.put('/admin/orders/settle-all', {});
+      toast.success(data.message);
+      fetchOrders();
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Bulk settlement failed';
+      toast.error(msg);
+    } finally {
+      setSettlingAll(false);
+    }
+  };
+
+  // Pay wholesaler group
+  const markGroupPaid = async (orderId, groupIndex) => {
+    try {
+      await api.put(`/admin/orders/${orderId}/pay-wholesaler-group`, { groupIndex });
+      toast.success('Wholesaler marked as paid');
+      setShowModal(false);
+      fetchOrders();
+    } catch (error) {
+      toast.error('Failed to mark wholesaler as paid');
+    }
+  };
 
   return (
     <Container fluid>
@@ -140,7 +152,7 @@ const OrderManagement = () => {
                 <tr>
                   <th>Order ID</th>
                   <th>Customer</th>
-                  <th>Wholesaler</th>
+                  <th>Wholesaler(s)</th>
                   <th>Rider</th>
                   <th>Amount</th>
                   <th>Status</th>
@@ -156,7 +168,11 @@ const OrderManagement = () => {
                     <tr key={order._id}>
                       <td><small>#{order._id?.slice(-6)}</small></td>
                       <td>{order.customer?.name || 'N/A'}</td>
-                      <td>{order.wholesaler?.storeName || order.wholesaler?.name || 'N/A'}</td>
+                      <td>
+                        {order.wholesalerGroups?.length > 0
+                          ? order.wholesalerGroups.map(g => g.storeName || g.wholesaler?.name).join(', ')
+                          : (order.wholesaler?.storeName || order.wholesaler?.name || 'N/A')}
+                      </td>
                       <td>{order.rider?.name || 'Unassigned'}</td>
                       <td>Rs. {order.payment?.amount || 0}</td>
                       <td>
@@ -212,7 +228,7 @@ const OrderManagement = () => {
         </Card.Body>
       </Card>
 
-      {/* Order Detail Modal (unchanged) */}
+      {/* Order Detail Modal */}
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Order #{selectedOrder?._id?.slice(-6)}</Modal.Title>
@@ -229,25 +245,74 @@ const OrderManagement = () => {
                 </Badge>
               </Col>
               <Col md={6}>
-                <strong>Wholesaler:</strong> {selectedOrder.wholesaler?.storeName || 'N/A'}<br />
                 <strong>Rider:</strong> {selectedOrder.rider?.name || 'Unassigned'}<br />
                 <strong>Amount:</strong> Rs. {selectedOrder.payment?.amount}
               </Col>
             </Row>
 
-            <h6>Items</h6>
-            <Table size="sm">
-              <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
-              <tbody>
-                {selectedOrder.items?.map((item, i) => (
-                  <tr key={i}>
-                    <td>{item.product?.name || 'Product'}</td>
-                    <td>{item.quantity}</td>
-                    <td>Rs. {item.price}</td>
-                  </tr>
+            {/* Wholesaler Groups (new) */}
+            {selectedOrder.wholesalerGroups && selectedOrder.wholesalerGroups.length > 0 ? (
+              <>
+                <h6>Wholesaler Groups</h6>
+                {selectedOrder.wholesalerGroups.map((group, idx) => (
+                  <div key={idx} className="p-2 mb-2 border rounded">
+                    <Row className="align-items-center">
+                      <Col md={4}>
+                        <strong>{group.storeName || 'Store'}</strong>
+                      </Col>
+                      <Col md={3}>
+                        <Badge bg={group.status === 'ready_for_pickup' ? 'success' : 'warning'}>
+                          {group.status}
+                        </Badge>
+                        {group.paid && <Badge bg="info" className="ms-1">Paid</Badge>}
+                      </Col>
+                      <Col md={5}>
+                        {!group.paid && (
+                          <Button
+                            variant="warning"
+                            size="sm"
+                            onClick={() => markGroupPaid(selectedOrder._id, idx)}
+                          >
+                            Mark Paid
+                          </Button>
+                        )}
+                      </Col>
+                    </Row>
+                    <Table size="sm" className="mt-2">
+                      <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
+                      <tbody>
+                        {group.items?.map((item, i) => (
+                          <tr key={i}>
+                            <td>{item.product?.name || 'Product'}</td>
+                            <td>{item.quantity}</td>
+                            <td>Rs. {item.price}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
                 ))}
-              </tbody>
-            </Table>
+              </>
+            ) : (
+              /* Old single-wholesaler order (legacy) */
+              <>
+                <h6>Wholesaler</h6>
+                <p>{selectedOrder.wholesaler?.storeName || selectedOrder.wholesaler?.name || 'N/A'}</p>
+                <h6>Items</h6>
+                <Table size="sm">
+                  <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
+                  <tbody>
+                    {selectedOrder.items?.map((item, i) => (
+                      <tr key={i}>
+                        <td>{item.product?.name || 'Product'}</td>
+                        <td>{item.quantity}</td>
+                        <td>Rs. {item.price}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </>
+            )}
 
             <h6>Timeline</h6>
             {selectedOrder.timeline?.map((t, i) => (
