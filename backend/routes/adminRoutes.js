@@ -151,7 +151,8 @@ router.get('/orders', protectAdmin, async (req, res) => {
     const filter = status ? { status } : {};
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
-      .populate('wholesalerGroups.wholesaler', 'name storeName')   // ← groups
+      .populate('wholesaler', 'name storeName')                 // ← old single wholesaler
+      .populate('wholesalerGroups.wholesaler', 'name storeName') // ← new groups
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
       .sort('-createdAt');

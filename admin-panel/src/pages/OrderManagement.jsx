@@ -169,11 +169,10 @@ const OrderManagement = () => {
                       <td><small>#{order._id?.slice(-6)}</small></td>
                       <td>{order.customer?.name || 'N/A'}</td>
                       <td>
-                        {/* FIXED: show storeNames from wholesalerGroups */}
-                        {order.wholesalerGroups
-                          ?.map(g => g.storeName || g.wholesaler?.name)
-                          .join(', ') || 'N/A'}
-                      </td>
+  {order.wholesalerGroups?.length > 0
+    ? order.wholesalerGroups.map(g => g.storeName || g.wholesaler?.name).join(', ')
+    : (order.wholesaler?.storeName || order.wholesaler?.name || 'N/A')}
+</td>
                       <td>{order.rider?.name || 'Unassigned'}</td>
                       <td>Rs. {order.payment?.amount || 0}</td>
                       <td>
