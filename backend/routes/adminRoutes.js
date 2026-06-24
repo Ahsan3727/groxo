@@ -1,4 +1,5 @@
-﻿const express = require('express');
+﻿// routes/adminRoutes.js
+const express = require('express');
 const router = express.Router();
 const {
   login,
@@ -164,6 +165,19 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
   }
 });
 
+// ---------- Product Catalog (NEW) ----------
+// GET /api/admin/products – all products with details, for the catalog view
+router.get('/products', protectAdmin, async (req, res) => {
+  try {
+    const products = await Product.find({})
+      .populate('wholesaler', 'storeName name email')
+      .sort({ createdAt: -1 });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // ---------- Order Management ----------
 router.get('/orders', protectAdmin, async (req, res) => {
   try {
@@ -172,8 +186,7 @@ router.get('/orders', protectAdmin, async (req, res) => {
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
-      .populate('wholesalerGroups.wholesaler', 'name storeName')   // <-- added for new model
-        .populate('wholesalerGroups.items.product', 'name price')   // ✅ ADD THIS LINE
+      .populate('wholesalerGroups.wholesaler', 'name storeName')
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
       .sort('-createdAt');

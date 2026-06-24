@@ -12,11 +12,13 @@ const Sidebar = ({ isOpen, onToggle, onLogout }) => {
     { path: '/users', icon: '👥', label: 'User Management' },
     { path: '/map', icon: '📍', label: 'Hub Map' },
     { path: '/orders', icon: '📦', label: 'Orders' },
+    { path: '/products-catalog', icon: '📦', label: 'Product Catalog' },
     { path: '/products', icon: '🛍️', label: 'Products' },
     { path: '/transactions', icon: '💰', label: 'Transactions' },
     { path: '/reports', icon: '📈', label: 'Reports' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
     { path: '/tickets', icon: '🎫', label: 'Support Tickets' },
+
   ];
 
   if (!isOpen) return null;

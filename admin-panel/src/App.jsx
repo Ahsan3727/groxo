@@ -20,6 +20,7 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import SupportTickets from './pages/SupportTickets';
 import Banners from './pages/Banners';   // ✅ newly added
+import ProductCatalog from './pages/ProductCatalog';
 
 // Services
 import api from './services/api';
@@ -154,6 +155,7 @@ function App() {
             <AppLayout><Banners /></AppLayout>
           </ProtectedRoute>
         } />
+        <Route path="/products-catalog" element={<ProductCatalog />} />
 
         {/* Catch all – redirect to dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />
