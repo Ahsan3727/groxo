@@ -171,6 +171,7 @@ exports.getOrders = async (req, res) => {
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
       .populate('wholesalerGroups.wholesaler', 'name storeName')
+        .populate('wholesalerGroups.items.product', 'name price')   // ✅ ADD THIS LINE
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price image')
       .sort('-createdAt');

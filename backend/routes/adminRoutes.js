@@ -173,6 +173,7 @@ router.get('/orders', protectAdmin, async (req, res) => {
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
       .populate('wholesalerGroups.wholesaler', 'name storeName')   // <-- added for new model
+        .populate('wholesalerGroups.items.product', 'name price')   // ✅ ADD THIS LINE
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
       .sort('-createdAt');
