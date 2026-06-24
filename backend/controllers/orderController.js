@@ -81,8 +81,7 @@ exports.createOrder = async (req, res) => {
       if (!groupMap[wid]) {
         groupMap[wid] = {
           wholesaler: product.wholesaler,
-          // 👇 Use storeName, fallback to name, fallback to 'Store'
-    storeName: product.wholesaler.name,   // ← use name, not storeName
+          storeName: product.wholesaler.name,   // ← use name, not storeName
           items: [],
         };
       }
@@ -171,7 +170,7 @@ exports.getOrders = async (req, res) => {
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
       .populate('wholesalerGroups.wholesaler', 'name storeName')
-        .populate('wholesalerGroups.items.product', 'name price')   // ✅ ADD THIS LINE
+      .populate('wholesalerGroups.items.product', 'name price')   // ✅ already present
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price image')
       .sort('-createdAt');
@@ -201,7 +200,8 @@ exports.getOrders = async (req, res) => {
                 amount: group.items.reduce((sum, i) => sum + i.price * i.quantity, 0),
               },
               timeline: order.timeline,
-              items: group.items,                          // only this wholesaler's items
+              // ✅ FIX: Convert each subdocument to a plain object so product names are retained
+              items: group.items.map(item => item.toObject()),
               groupStatus: group.status,
               groupPaid: group.paid,
               groupIndex: order.wholesalerGroups.indexOf(group),
