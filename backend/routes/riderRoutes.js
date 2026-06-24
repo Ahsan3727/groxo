@@ -5,7 +5,6 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 
 // ---------- GET active order for the logged-in rider ----------
-// GET /api/rider/active-order
 router.get('/active-order', protect, async (req, res) => {
   if (req.user.role !== 'rider') return res.status(403).json({ message: 'Rider access only' });
 
@@ -16,7 +15,8 @@ router.get('/active-order', protect, async (req, res) => {
     })
       .populate('customer', 'name phone')
       .populate('wholesaler', 'storeName name')                 // old orders
-      .populate('wholesalerGroups.wholesaler', 'storeName name') // new orders
+      .populate('wholesalerGroups.wholesaler', 'storeName name') // new groups
+      .populate('wholesalerGroups.items.product', 'name price')  // ✅ ADD THIS LINE
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price');
 
