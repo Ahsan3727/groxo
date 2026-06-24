@@ -74,6 +74,7 @@ router.put('/:id/accept', protect, async (req, res) => {
       'customer',
       'wholesaler',               // old single wholesaler
       'wholesalerGroups.wholesaler', // new groups
+      'wholesalerGroups.items.product', // ✅ ADD THIS LINE
       'rider',
       'items.product',
     ]);
