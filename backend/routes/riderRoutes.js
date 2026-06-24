@@ -5,20 +5,22 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 
 // ---------- GET active order for the logged-in rider ----------
+// GET /api/rider/active-order
 router.get('/active-order', protect, async (req, res) => {
-  try {
-    if (req.user.role !== 'rider') {
-      return res.status(403).json({ message: 'Rider access only' });
-    }
+  if (req.user.role !== 'rider') return res.status(403).json({ message: 'Rider access only' });
 
+  try {
     const order = await Order.findOne({
       rider: req.user._id,
-      status: { $nin: ['delivered', 'cancelled'] }
+      status: { $nin: ['delivered', 'cancelled'] },
     })
-      .populate('wholesaler', 'storeName name address')
-      .populate('customer', 'name phone deliveryAddress');
+      .populate('customer', 'name phone')
+      .populate('wholesaler', 'storeName name')                 // old orders
+      .populate('wholesalerGroups.wholesaler', 'storeName name') // new orders
+      .populate('rider', 'name phone vehicle')
+      .populate('items.product', 'name price');
 
-    res.json({ order });   // null if no active order
+    res.json({ order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

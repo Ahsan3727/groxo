@@ -235,117 +235,120 @@ const OrderManagement = () => {
         </Modal.Header>
         {selectedOrder && (
           <Modal.Body>
-            <Row className="mb-3">
-              <Col md={6}>
-                <strong>Customer:</strong> {selectedOrder.customer?.name}<br />
-                <strong>Phone:</strong> {selectedOrder.customer?.phone}<br />
-                <strong>Status:</strong>{' '}
-                <Badge bg={statusColors[selectedOrder.status]}>
-                  {selectedOrder.status?.replace(/_/g, ' ')}
-                </Badge>
-              </Col>
-              <Col md={6}>
-                <strong>Rider:</strong> {selectedOrder.rider?.name || 'Unassigned'}<br />
-                <strong>Amount:</strong> Rs. {selectedOrder.payment?.amount}
-              </Col>
-            </Row>
-
-            {/* Wholesaler Groups (new) */}
-            {selectedOrder.wholesalerGroups && selectedOrder.wholesalerGroups.length > 0 ? (
-              <>
-                <h6>Wholesaler Groups</h6>
-                {selectedOrder.wholesalerGroups.map((group, idx) => (
-                  <div key={idx} className="p-2 mb-2 border rounded">
-                    <Row className="align-items-center">
-                      <Col md={4}>
-                        <strong>{group.storeName || 'Store'}</strong>
-                      </Col>
-                      <Col md={3}>
-                        <Badge bg={group.status === 'ready_for_pickup' ? 'success' : 'warning'}>
-                          {group.status}
-                        </Badge>
-                        {group.paid && <Badge bg="info" className="ms-1">Paid</Badge>}
-                      </Col>
-                      <Col md={5}>
-                        {!group.paid && (
-                          <Button
-                            variant="warning"
-                            size="sm"
-                            onClick={() => markGroupPaid(selectedOrder._id, idx)}
-                          >
-                            Mark Paid
-                          </Button>
-                        )}
-                      </Col>
-                    </Row>
-                    <Table size="sm" className="mt-2">
-                      <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
-                      <tbody>
-                        {group.items?.map((item, i) => (
-                          <tr key={i}>
-                            <td>{item.product?.name || 'Product'}</td>
-                            <td>{item.quantity}</td>
-                            <td>Rs. {item.price}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  </div>
-                ))}
-              </>
-            ) : (
-              /* Old single-wholesaler order (legacy) */
-              <>
-                <Row className="mb-2">
-    <Col><strong>Wholesaler:</strong> {selectedOrder.wholesaler?.storeName || selectedOrder.wholesaler?.name || 'N/A'}</Col>
+  <Row className="mb-3">
+    <Col md={6}>
+      <strong>Customer:</strong> {selectedOrder.customer?.name}<br />
+      <strong>Phone:</strong> {selectedOrder.customer?.phone}<br />
+      <strong>Status:</strong>{' '}
+      <Badge bg={statusColors[selectedOrder.status]}>
+        {selectedOrder.status?.replace(/_/g, ' ')}
+      </Badge>
+    </Col>
+    <Col md={6}>
+      <strong>Rider:</strong> {selectedOrder.rider?.name || 'Unassigned'}<br />
+      <strong>Amount:</strong> Rs. {selectedOrder.payment?.amount}
+    </Col>
   </Row>
-  <h6>Items</h6>
-                <Table size="sm">
-                  <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
-                  <tbody>
-                    {selectedOrder.items?.map((item, i) => (
-                      <tr key={i}>
-                        <td>{item.product?.name || 'Product'}</td>
-                        <td>{item.quantity}</td>
-                        <td>Rs. {item.price}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </>
-            )}
 
-            <h6>Timeline</h6>
-            {selectedOrder.timeline?.map((t, i) => (
-              <div key={i} className="mb-1">
-                <small>
-                  {new Date(t.timestamp).toLocaleString()} – {t.status} {t.note && `(${t.note})`}
-                </small>
-              </div>
-            ))}
-
-            <h6 className="mt-3">Assign Rider</h6>
-            <Row className="align-items-end">
-              <Col md={8}>
-                <Form.Select
-                  value={assignRiderId}
-                  onChange={(e) => setAssignRiderId(e.target.value)}
+  {/* ---- Wholesaler Info (New or Old) ---- */}
+  {selectedOrder.wholesalerGroups?.length > 0 ? (
+    <>
+      <h6>🛍️ Pickup Stops</h6>
+      {selectedOrder.wholesalerGroups.map((group, idx) => (
+        <div key={idx} className="p-2 mb-2 border rounded">
+          <Row className="align-items-center">
+            <Col md={4}>
+              <strong>{group.storeName || group.wholesaler?.name || 'Wholesaler'}</strong>
+            </Col>
+            <Col md={3}>
+              <Badge bg={group.status === 'ready_for_pickup' ? 'success' : 'warning'}>
+                {group.status}
+              </Badge>
+              {group.paid && <Badge bg="info" className="ms-1">Paid</Badge>}
+            </Col>
+            <Col md={5}>
+              {!group.paid && (
+                <Button
+                  variant="warning"
+                  size="sm"
+                  onClick={() => markGroupPaid(selectedOrder._id, idx)}
                 >
-                  <option value="">Select Rider</option>
-                  {riders.map(r => (
-                    <option key={r._id} value={r._id}>
-                      {r.name} ({r.vehicle?.type || 'Vehicle'})
-                    </option>
-                  ))}
-                </Form.Select>
-              </Col>
-              <Col md={4}>
-                <Button variant="primary" onClick={assignRider}>
-                  Assign
+                  Mark Paid
                 </Button>
-              </Col>
-            </Row>
-          </Modal.Body>
+              )}
+            </Col>
+          </Row>
+          <Table size="sm" className="mt-2">
+            <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
+            <tbody>
+              {group.items?.map((item, i) => (
+                <tr key={i}>
+                  <td>{item.product?.name || 'Product'}</td>
+                  <td>{item.quantity}</td>
+                  <td>Rs. {item.price}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+      ))}
+    </>
+  ) : (
+    /* Old single‑wholesaler order */
+    <>
+      <Row className="mb-2">
+        <Col md={6}>
+          <strong>Wholesaler:</strong>{' '}
+          {selectedOrder.wholesaler?.storeName || selectedOrder.wholesaler?.name || 'N/A'}
+        </Col>
+      </Row>
+      <h6>Items</h6>
+      <Table size="sm">
+        <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
+        <tbody>
+          {selectedOrder.items?.map((item, i) => (
+            <tr key={i}>
+              <td>{item.product?.name || 'Product'}</td>
+              <td>{item.quantity}</td>
+              <td>Rs. {item.price}</td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    </>
+  )}
+
+  <h6 className="mt-3">Timeline</h6>
+  {selectedOrder.timeline?.map((t, i) => (
+    <div key={i} className="mb-1">
+      <small>
+        {new Date(t.timestamp).toLocaleString()} – {t.status} {t.note && `(${t.note})`}
+      </small>
+    </div>
+  ))}
+
+  <h6 className="mt-3">Assign Rider</h6>
+  <Row className="align-items-end">
+    <Col md={8}>
+      <Form.Select
+        value={assignRiderId}
+        onChange={(e) => setAssignRiderId(e.target.value)}
+      >
+        <option value="">Select Rider</option>
+        {riders.map(r => (
+          <option key={r._id} value={r._id}>
+            {r.name} ({r.vehicle?.type || 'Vehicle'})
+          </option>
+        ))}
+      </Form.Select>
+    </Col>
+    <Col md={4}>
+      <Button variant="primary" onClick={assignRider}>
+        Assign
+      </Button>
+    </Col>
+  </Row>
+</Modal.Body>
         )}
       </Modal>
     </Container>
