@@ -4,6 +4,7 @@ import {
 } from 'react-bootstrap';
 import api from '../services/api';
 import { toast } from 'react-toastify';
+import axios from 'axios';   // add this at the top of the file
 
 const ProductCatalog = () => {
   const [products, setProducts] = useState([]);
@@ -74,16 +75,20 @@ const ProductCatalog = () => {
     const formData = new FormData();
     formData.append('productImage', newImageFile);
 
-    // Do NOT set Content-Type – Axios will set it with the correct boundary
-    const response = await api.put(
-      `/admin/products/${selectedProduct._id}/image`,
-      formData
-    );
+    // Use the same base URL as your `api` instance, but without any default Content‑Type
+    const baseURL = api.defaults.baseURL || '';
+    const url = `${baseURL}/admin/products/${selectedProduct._id}/image`;
+
+    await axios.put(url, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',   // ← explicitly set, boundary added automatically
+      },
+    });
+
     toast.success('Image updated');
     setShowImageModal(false);
     fetchProducts();
   } catch (err) {
-    // Log the exact error for debugging
     console.error('Image upload error:', err.response?.data || err.message);
     toast.error(err.response?.data?.message || 'Failed to update image');
   } finally {
