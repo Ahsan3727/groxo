@@ -223,7 +223,7 @@ router.put('/products/:id/image', protectAdmin, (req, res) => {
       // Save the image path (relative to the server root)
       product.image = `/uploads/products/${req.file.filename}`;
       await product.save();
-
+console.log('Image upload route hit, file:', req.file);
       res.json({ message: 'Image uploaded', image: product.image });
     } catch (error) {
       res.status(500).json({ message: error.message });
