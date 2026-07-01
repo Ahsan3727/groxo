@@ -1,16 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Row,
-  Col,
-  Card,
-  Table,
-  Badge,
-  Button,
-  Modal,
-  Form,
-  Spinner,
-  InputGroup,
+  Container, Row, Col, Card, Table, Badge, Button,
+  Modal, Form, Spinner, InputGroup,
 } from 'react-bootstrap';
 import api from '../services/api';
 import { toast } from 'react-toastify';
@@ -23,6 +14,7 @@ const ProductApprovals = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [adminPrice, setAdminPrice] = useState('');
+  const [retailPrice, setRetailPrice] = useState('');   // NEW
 
   // ────────── Category Management State ──────────
   const [categories, setCategories] = useState([]);
@@ -50,6 +42,7 @@ const ProductApprovals = () => {
   const handleOpenPriceModal = (product) => {
     setSelectedProduct(product);
     setAdminPrice(product.adminPrice || product.wholesalerPrice || '');
+    setRetailPrice(product.retailPrice || '');   // pre-fill retail price
     setShowPriceModal(true);
   };
 
@@ -63,6 +56,7 @@ const ProductApprovals = () => {
       await api.put(`/admin/products/${productId}`, {
         status: 'approved',
         adminPrice: Number(adminPrice),
+        retailPrice: Number(retailPrice) || 0,   // send retail price
       });
       toast.success('Product approved!');
       setShowPriceModal(false);
@@ -149,6 +143,7 @@ const ProductApprovals = () => {
                       <th>Wholesaler</th>
                       <th>Wholesaler Price</th>
                       <th>Admin Price</th>
+                      <th>Retail Price</th>      {/* NEW column */}
                       <th>Status</th>
                       <th>Actions</th>
                     </tr>
@@ -165,6 +160,7 @@ const ProductApprovals = () => {
                         <td>{product.wholesaler?.storeName || product.wholesaler?.name || 'N/A'}</td>
                         <td>Rs. {product.wholesalerPrice || product.price || 0}</td>
                         <td>Rs. {product.adminPrice || '-'}</td>
+                        <td>Rs. {product.retailPrice || '-'}</td>   {/* NEW */}
                         <td>
                           <Badge
                             bg={
@@ -271,7 +267,7 @@ const ProductApprovals = () => {
         </Col>
       </Row>
 
-      {/* ────────── Price Setting Modal (unchanged) ────────── */}
+      {/* ────────── Price Setting Modal (updated) ────────── */}
       <Modal show={showPriceModal} onHide={() => setShowPriceModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Set Final Price – {selectedProduct?.name}</Modal.Title>
@@ -288,6 +284,15 @@ const ProductApprovals = () => {
               onChange={(e) => setAdminPrice(e.target.value)}
             />
           </Form.Group>
+          <Form.Group className="mt-3">
+            <Form.Label>Retail Price (optional)</Form.Label>
+            <Form.Control
+              type="number"
+              placeholder="Enter suggested retail price"
+              value={retailPrice}
+              onChange={(e) => setRetailPrice(e.target.value)}
+            />
+          </Form.Group>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowPriceModal(false)}>
@@ -299,7 +304,7 @@ const ProductApprovals = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* ────────── Product Detail Modal (NEW) ────────── */}
+      {/* ────────── Product Detail Modal (updated) ────────── */}
       <Modal
         show={showDetailModal}
         onHide={() => setShowDetailModal(false)}
@@ -335,6 +340,7 @@ const ProductApprovals = () => {
                 <Col md={6}>
                   <p><strong>Wholesaler Price:</strong> Rs. {selectedProduct.wholesalerPrice || selectedProduct.price || 0}</p>
                   <p><strong>Admin Price:</strong> Rs. {selectedProduct.adminPrice || 'Not set'}</p>
+                  <p><strong>Retail Price:</strong> Rs. {selectedProduct.retailPrice || 'Not set'}</p>   {/* NEW */}
                   <p><strong>Stock:</strong> {selectedProduct.stock || 0}</p>
                   <p><strong>Status:</strong>{' '}
                     <Badge

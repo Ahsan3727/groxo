@@ -148,7 +148,7 @@ router.get('/products/pending', protectAdmin, async (req, res) => {
 
 router.put('/products/:id', protectAdmin, async (req, res) => {
   try {
-    const { status, adminPrice } = req.body;
+    const { status, adminPrice, retailPrice } = req.body;   // ← added retailPrice
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
@@ -157,6 +157,7 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
       product.isApproved = status === 'approved';
     }
     if (adminPrice != null) product.adminPrice = adminPrice;
+    if (retailPrice != null) product.retailPrice = retailPrice;   // ← NEW
 
     await product.save();
     res.json(product);
