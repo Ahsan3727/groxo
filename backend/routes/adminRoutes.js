@@ -2,6 +2,7 @@
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const {
   login,
   me,
@@ -17,9 +18,14 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Banner = require('../models/Banner');
 
-// ---------- Multer configuration ----------
+// ---------- Multer configuration (absolute path + auto-create) ----------
+const uploadsDir = path.join(__dirname, '..', 'uploads', 'products');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-  destination: './uploads/products/',
+  destination: uploadsDir,
   filename: function (req, file, cb) {
     cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
   },
@@ -174,6 +180,45 @@ router.get('/products/pending', protectAdmin, async (req, res) => {
   }
 });
 
+// ---------- Product Catalog ----------
+// GET /api/admin/products – all products with details
+router.get('/products', protectAdmin, async (req, res) => {
+  try {
+    const products = await Product.find({})
+      .populate('wholesaler', 'storeName name email')
+      .sort({ createdAt: -1 });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- IMAGE UPLOAD – MUST be BEFORE the generic /products/:id ----------
+router.put('/products/:id/image', protectAdmin, (req, res) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({ message: err });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file selected' });
+    }
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ message: 'Product not found' });
+
+      product.image = `/uploads/products/${req.file.filename}`;
+      await product.save();
+
+      console.log('File saved to:', req.file.path);
+      res.json({ message: 'Image uploaded', image: product.image });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+});
+
+// ---------- Generic product update – now AFTER the image route ----------
 router.put('/products/:id', protectAdmin, async (req, res) => {
   try {
     const { status, adminPrice, retailPrice } = req.body;
@@ -192,43 +237,6 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-});
-
-// ---------- Product Catalog ----------
-// GET /api/admin/products – all products with details
-router.get('/products', protectAdmin, async (req, res) => {
-  try {
-    const products = await Product.find({})
-      .populate('wholesaler', 'storeName name email')
-      .sort({ createdAt: -1 });
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// ---------- NEW: Image upload for products ----------
-router.put('/products/:id/image', protectAdmin, (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ message: err });
-    }
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file selected' });
-    }
-    try {
-      const product = await Product.findById(req.params.id);
-      if (!product) return res.status(404).json({ message: 'Product not found' });
-
-      // Save the image path (relative to the server root)
-      product.image = `/uploads/products/${req.file.filename}`;
-      await product.save();
-console.log('Image upload route hit, file:', req.file);
-      res.json({ message: 'Image uploaded', image: product.image });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  });
 });
 
 // ---------- Order Management ----------

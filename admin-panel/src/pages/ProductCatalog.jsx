@@ -63,7 +63,7 @@ const ProductCatalog = () => {
     fileInputRef.current.click();
   };
 
-  const handleSaveImage = async () => {
+ const handleSaveImage = async () => {
   if (!selectedProduct) return;
   if (!newImageFile) {
     toast.error('Please select an image first');
@@ -75,14 +75,14 @@ const ProductCatalog = () => {
     const formData = new FormData();
     formData.append('productImage', newImageFile);
 
-    // Use the same base URL as your `api` instance, but without any default Content‑Type
-    const baseURL = api.defaults.baseURL || '';
-    const url = `${baseURL}/admin/products/${selectedProduct._id}/image`;
-
-    await axios.put(url, formData, {
+    // Use the existing `api` instance – it will automatically attach the token
+    await api.put(`/admin/products/${selectedProduct._id}/image`, formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',   // ← explicitly set, boundary added automatically
+        // Let Axios set the content-type automatically (multipart with boundary)
+        'Content-Type': 'multipart/form-data',
       },
+      // Prevent Axios from trying to convert the FormData to JSON
+      transformRequest: [(data) => data],
     });
 
     toast.success('Image updated');
