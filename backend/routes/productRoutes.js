@@ -18,6 +18,7 @@ router.post('/', protect, async (req, res) => {
       image,
       category,
       price,
+      retailPrice: retailPrice || 0,   // ← NEW
       wholesalerPrice: price,
       wholesaler: req.user._id,
       stock,
