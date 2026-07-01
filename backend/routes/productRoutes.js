@@ -11,7 +11,7 @@ router.post('/', protect, async (req, res) => {
       return res.status(403).json({ message: 'Only wholesalers can add products' });
     }
 
-    const { name, description, image, category, price, stock } = req.body;
+    const { name, description, image, category, price, retailPrice, stock } = req.body;
     const product = await Product.create({
       name,
       description,
