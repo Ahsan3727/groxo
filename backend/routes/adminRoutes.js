@@ -1,6 +1,7 @@
-﻿// routes/adminRoutes.js
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 const {
   login,
   me,
@@ -15,6 +16,33 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Banner = require('../models/Banner');
+
+// ---------- Multer configuration ----------
+const storage = multer.diskStorage({
+  destination: './uploads/products/',
+  filename: function (req, file, cb) {
+    cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: function (req, file, cb) {
+    checkFileType(file, cb);
+  },
+}).single('productImage');
+
+function checkFileType(file, cb) {
+  const filetypes = /jpeg|jpg|png|gif/;
+  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = filetypes.test(file.mimetype);
+  if (mimetype && extname) {
+    return cb(null, true);
+  } else {
+    cb('Error: Images Only!');
+  }
+}
 
 // ---------- Auth / Admin info ----------
 router.post('/login', login);
@@ -148,7 +176,7 @@ router.get('/products/pending', protectAdmin, async (req, res) => {
 
 router.put('/products/:id', protectAdmin, async (req, res) => {
   try {
-    const { status, adminPrice, retailPrice } = req.body;   // ← added retailPrice
+    const { status, adminPrice, retailPrice } = req.body;
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
@@ -157,7 +185,7 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
       product.isApproved = status === 'approved';
     }
     if (adminPrice != null) product.adminPrice = adminPrice;
-    if (retailPrice != null) product.retailPrice = retailPrice;   // ← NEW
+    if (retailPrice != null) product.retailPrice = retailPrice;
 
     await product.save();
     res.json(product);
@@ -166,8 +194,8 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
   }
 });
 
-// ---------- Product Catalog (NEW) ----------
-// GET /api/admin/products – all products with details, for the catalog view
+// ---------- Product Catalog ----------
+// GET /api/admin/products – all products with details
 router.get('/products', protectAdmin, async (req, res) => {
   try {
     const products = await Product.find({})
@@ -177,6 +205,30 @@ router.get('/products', protectAdmin, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+// ---------- NEW: Image upload for products ----------
+router.put('/products/:id/image', protectAdmin, (req, res) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ message: err });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file selected' });
+    }
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) return res.status(404).json({ message: 'Product not found' });
+
+      // Save the image path (relative to the server root)
+      product.image = `/uploads/products/${req.file.filename}`;
+      await product.save();
+
+      res.json({ message: 'Image uploaded', image: product.image });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
 });
 
 // ---------- Order Management ----------

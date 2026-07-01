@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Badge, Modal, Form, Button, Spinner } from 'react-bootstrap';
+import {
+  Container, Row, Col, Card, Badge, Modal, Form, Button, Spinner,
+} from 'react-bootstrap';
 import api from '../services/api';
 import { toast } from 'react-toastify';
 
@@ -66,50 +68,56 @@ const ProductCatalog = () => {
     <Container fluid>
       <h4 className="mb-4">📦 Product Catalog</h4>
 
-      {Object.keys(grouped).map(category => (
-        <div key={category} className="mb-4">
-          <h5 className="mb-3 text-capitalize">{category}</h5>
-          <Row>
-            {grouped[category].map(product => (
-              <Col key={product._id} md={3} className="mb-3">
-                <Card className="h-100 shadow-sm border-0">
-                  {/* 1:1 image frame */}
-                  <div className="position-relative" style={{ paddingTop: '100%', overflow: 'hidden' }}>
-                    <img
-                      src={product.image || 'https://via.placeholder.com/300?text=No+Image'}
-                      alt={product.name}
-                      className="position-absolute top-0 start-0 w-100 h-100"
-                      style={{ objectFit: 'cover' }}
-                    />
-                  </div>
-                  <Card.Body>
-                    <h6 className="fw-bold">{product.name}</h6>
-                    <p className="small text-muted mb-1">
-                      Wholesaler:{' '}
-                      <Badge bg="warning" text="dark">
-                        {product.wholesaler?.storeName || product.wholesaler?.name || 'N/A'}
+      {Object.keys(grouped).length === 0 ? (
+        <div className="text-center py-4 text-muted">No products yet</div>
+      ) : (
+        Object.keys(grouped).map(category => (
+          <div key={category} className="mb-4">
+            <h5 className="mb-3 text-capitalize">{category}</h5>
+            <Row>
+              {grouped[category].map(product => (
+                <Col key={product._id} md={3} className="mb-3">
+                  <Card className="h-100 shadow-sm border-0">
+                    {/* 1:1 image frame */}
+                    <div className="position-relative" style={{ paddingTop: '100%', overflow: 'hidden' }}>
+                      <img
+                        src={product.image || 'https://via.placeholder.com/300?text=No+Image'}
+                        alt={product.name}
+                        className="position-absolute top-0 start-0 w-100 h-100"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
+                    <Card.Body>
+                      <h6 className="fw-bold">{product.name}</h6>
+                      <p className="small text-muted mb-1">
+                        Wholesaler:{' '}
+                        <Badge bg="warning" text="dark">
+                          {product.wholesaler?.storeName || product.wholesaler?.name || 'N/A'}
+                        </Badge>
+                      </p>
+                      <p className="mb-1"><strong>Wholesale Price:</strong> Rs. {product.price}</p>
+                      <p className="mb-1"><strong>Retail Price:</strong> Rs. {product.retailPrice || '-'}</p>
+                      <p className="mb-1"><strong>Admin Price:</strong> Rs. {product.adminPrice || '-'}</p>
+                      <p className="mb-1"><strong>Stock:</strong> {product.stock} {product.unit}</p>
+                      <Badge bg={product.isApproved ? 'success' : 'secondary'}>
+                        {product.isApproved ? 'Approved' : product.status}
                       </Badge>
-                    </p>
-                    <p className="mb-1"><strong>Price:</strong> Rs. {product.price}</p>
-                    <p className="mb-1"><strong>Stock:</strong> {product.stock} {product.unit}</p>
-                    <Badge bg={product.isApproved ? 'success' : 'secondary'}>
-                      {product.isApproved ? 'Approved' : product.status}
-                    </Badge>
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      className="mt-2 w-100"
-                      onClick={() => openImageModal(product)}
-                    >
-                      🖼️ Edit Image
-                    </Button>
-                  </Card.Body>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </div>
-      ))}
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        className="mt-2 w-100"
+                        onClick={() => openImageModal(product)}
+                      >
+                        🖼️ Edit Image
+                      </Button>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </div>
+        ))
+      )}
 
       {/* Image Edit Modal */}
       <Modal show={showImageModal} onHide={() => setShowImageModal(false)} centered>
