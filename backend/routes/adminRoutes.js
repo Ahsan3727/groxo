@@ -207,7 +207,7 @@ router.put('/products/:id/image', protectAdmin, (req, res) => {
       const product = await Product.findById(req.params.id);
       if (!product) return res.status(404).json({ message: 'Product not found' });
 
-      product.image = `/uploads/products/${req.file.filename}`;
+      product.image = `https://groxo-0zy1.onrender.com/uploads/products/${req.file.filename}`;
       await product.save();
 
       console.log('File saved to:', req.file.path);

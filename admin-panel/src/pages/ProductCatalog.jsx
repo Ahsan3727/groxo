@@ -136,11 +136,8 @@ const ProductCatalog = () => {
                       }}
                     >
                       <img
-                        src={
-                          product.image
-                            ? `${IMAGE_BASE}${product.image}`
-                            : 'https://via.placeholder.com/300?text=No+Image'
-                        }
+                        src={product.image || 'https://via.placeholder.com/300?text=No+Image'}
+
                         alt={product.name}
                         className="position-absolute top-0 start-0 w-100 h-100"
                         style={{ objectFit: 'cover', transition: 'transform 0.3s ease' }}
