@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('../config/cloudinary'); // ✅ Cloudinary import
 const {
   login,
   me,
@@ -193,7 +194,7 @@ router.get('/products', protectAdmin, async (req, res) => {
   }
 });
 
-// ---------- IMAGE UPLOAD – MUST be BEFORE the generic /products/:id ----------
+// ---------- IMAGE UPLOAD – Cloudinary powered, permanent storage ----------
 router.put('/products/:id/image', protectAdmin, (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
@@ -203,17 +204,30 @@ router.put('/products/:id/image', protectAdmin, (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
     }
+
     try {
+      // Upload to Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: 'groxo-products',
+        use_filename: true,
+        unique_filename: true,
+      });
+
+      // Delete the temporary local file
+      fs.unlinkSync(req.file.path);
+
+      // Update the product with the permanent Cloudinary URL
       const product = await Product.findById(req.params.id);
       if (!product) return res.status(404).json({ message: 'Product not found' });
 
-      product.image = `https://groxo-0zy1.onrender.com/uploads/products/${req.file.filename}`;
+      product.image = result.secure_url;
       await product.save();
 
-      console.log('File saved to:', req.file.path);
+      console.log('Image uploaded to Cloudinary:', product.image);
       res.json({ message: 'Image uploaded', image: product.image });
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      console.error('Cloudinary upload error:', error);
+      res.status(500).json({ message: 'Image upload failed' });
     }
   });
 });
