@@ -1,21 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Container, Row, Col, Card, Badge, Modal, Form, Button, Spinner,
+  Container, Row, Col, Card, Badge, Modal, Button, Spinner,
 } from 'react-bootstrap';
+import axios from 'axios';
 import api from '../services/api';
 import { toast } from 'react-toastify';
-import axios from 'axios';   // add this at the top of the file
 
+// Base URL for images (adjust if your server runs elsewhere)
+const IMAGE_BASE = 'https://groxo-0zy1.onrender.com';
 const ProductCatalog = () => {
+  // ---------- Product state ----------
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // ---------- Image modal state ----------
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [newImageFile, setNewImageFile] = useState(null);   // file object
-  const [newImagePreview, setNewImagePreview] = useState(''); // preview URL
+  const [newImageFile, setNewImageFile] = useState(null);      // the actual File object
+  const [newImagePreview, setNewImagePreview] = useState('');   // base64 preview
   const [saving, setSaving] = useState(false);
+
   const fileInputRef = useRef(null);
 
+  // ---------- Fetch all products ----------
   const fetchProducts = async () => {
     try {
       const { data } = await api.get('/admin/products');
@@ -29,7 +36,7 @@ const ProductCatalog = () => {
 
   useEffect(() => { fetchProducts(); }, []);
 
-  // Group by category
+  // ---------- Group by category ----------
   const grouped = products.reduce((acc, product) => {
     const cat = product.category || 'Uncategorised';
     if (!acc[cat]) acc[cat] = [];
@@ -37,6 +44,7 @@ const ProductCatalog = () => {
     return acc;
   }, {});
 
+  // ---------- Open modal ----------
   const openImageModal = (product) => {
     setSelectedProduct(product);
     setNewImageFile(null);
@@ -44,58 +52,57 @@ const ProductCatalog = () => {
     setShowImageModal(true);
   };
 
-  // Handle file selection
+  // ---------- Handle file selection ----------
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setNewImageFile(file);
-      // Create a preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setNewImageFile(file);
+
+    // Create live preview
+    const reader = new FileReader();
+    reader.onloadend = () => setNewImagePreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  // ---------- Trigger file input ----------
+  const triggerFileInput = () => fileInputRef.current?.click();
+
+  // ---------- Upload image ----------
+  const handleSaveImage = async () => {
+    if (!selectedProduct) return;
+    if (!newImageFile) {
+      toast.error('Please select an image first');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('productImage', newImageFile);
+
+      // Use the existing api instance → token is included automatically
+      await api.put(
+        `/admin/products/${selectedProduct._id}/image`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          transformRequest: [(data) => data],   // don't convert FormData to JSON
+        }
+      );
+
+      toast.success('Image updated');
+      setShowImageModal(false);
+      fetchProducts();   // refresh list
+    } catch (err) {
+      console.error('Image upload error:', err.response?.data || err.message);
+      toast.error(err.response?.data?.message || 'Failed to update image');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Trigger file input
-  const triggerFileInput = () => {
-    fileInputRef.current.click();
-  };
-
- const handleSaveImage = async () => {
-  if (!selectedProduct) return;
-  if (!newImageFile) {
-    toast.error('Please select an image first');
-    return;
-  }
-
-  setSaving(true);
-  try {
-    const formData = new FormData();
-    formData.append('productImage', newImageFile);
-
-    // Use the existing `api` instance – it will automatically attach the token
-    await api.put(`/admin/products/${selectedProduct._id}/image`, formData, {
-      headers: {
-        // Let Axios set the content-type automatically (multipart with boundary)
-        'Content-Type': 'multipart/form-data',
-      },
-      // Prevent Axios from trying to convert the FormData to JSON
-      transformRequest: [(data) => data],
-    });
-
-    toast.success('Image updated');
-    setShowImageModal(false);
-    fetchProducts();
-  } catch (err) {
-    console.error('Image upload error:', err.response?.data || err.message);
-    toast.error(err.response?.data?.message || 'Failed to update image');
-  } finally {
-    setSaving(false);
-  }
-};
-
+  // ---------- Render ----------
   if (loading) {
     return (
       <div className="text-center py-5">
@@ -129,7 +136,11 @@ const ProductCatalog = () => {
                       }}
                     >
                       <img
-                        src={product.image || 'https://via.placeholder.com/300?text=No+Image'}
+                        src={
+                          product.image
+                            ? `${IMAGE_BASE}${product.image}`
+                            : 'https://via.placeholder.com/300?text=No+Image'
+                        }
                         alt={product.name}
                         className="position-absolute top-0 start-0 w-100 h-100"
                         style={{ objectFit: 'cover', transition: 'transform 0.3s ease' }}
@@ -151,11 +162,15 @@ const ProductCatalog = () => {
                       </div>
                       <div className="mb-1">
                         <span className="text-muted me-2">Retail:</span>
-                        <span className="fw-semibold">{product.retailPrice ? `Rs. ${product.retailPrice}` : '-'}</span>
+                        <span className="fw-semibold">
+                          {product.retailPrice ? `Rs. ${product.retailPrice}` : '-'}
+                        </span>
                       </div>
                       <div className="mb-1">
                         <span className="text-muted me-2">Admin:</span>
-                        <span className="fw-semibold">{product.adminPrice ? `Rs. ${product.adminPrice}` : '-'}</span>
+                        <span className="fw-semibold">
+                          {product.adminPrice ? `Rs. ${product.adminPrice}` : '-'}
+                        </span>
                       </div>
                       <div className="mb-2">
                         <span className="text-muted me-2">Stock:</span>
@@ -183,17 +198,17 @@ const ProductCatalog = () => {
         ))
       )}
 
-      {/* Hidden file input */}
+      {/* Hidden file input – capture attribute allows camera on mobile */}
       <input
         type="file"
         accept="image/*"
         ref={fileInputRef}
         style={{ display: 'none' }}
         onChange={handleFileChange}
-        capture // optional: on mobile devices, allows camera capture
+        capture
       />
 
-      {/* Image Edit Modal */}
+      {/* ────────── Image Edit Modal ────────── */}
       <Modal show={showImageModal} onHide={() => setShowImageModal(false)} centered size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Edit Product Image – {selectedProduct?.name}</Modal.Title>
@@ -218,7 +233,7 @@ const ProductCatalog = () => {
                 <img src={newImagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               ) : selectedProduct?.image ? (
                 <img
-                  src={selectedProduct.image}
+                  src={`${IMAGE_BASE}${selectedProduct.image}`}
                   alt="Current"
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
@@ -232,10 +247,7 @@ const ProductCatalog = () => {
             <Button variant="primary" onClick={triggerFileInput}>
               📁 Choose File
             </Button>
-            <Button variant="outline-secondary" onClick={() => {
-              // Option: capture from camera (mobile) – same file input with capture attribute
-              triggerFileInput();
-            }}>
+            <Button variant="outline-secondary" onClick={triggerFileInput}>
               📷 Take Photo
             </Button>
           </div>
