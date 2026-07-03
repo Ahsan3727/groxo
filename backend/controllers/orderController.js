@@ -300,7 +300,7 @@ exports.updateOrderStatus = async (req, res) => {
     if (status === 'cancelled' && req.body.reason) order.cancellationReason = req.body.reason;
 
     await order.save();
-    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
+    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler','wholesalerGroups.items.product',  'rider', 'items.product']);
 
     if (order.customer) {
       sendPushNotification(
@@ -369,7 +369,7 @@ exports.assignRider = async (req, res) => {
     });
 
     await order.save();
-    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
+    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler','wholesalerGroups.items.product',  'rider', 'items.product']);
 
     if (rider.expoPushToken) {
       sendPushNotification(
@@ -410,7 +410,7 @@ exports.updateGroupStatus = async (req, res) => {
     order.status = allReady ? 'ready_for_pickup' : 'packing';
 
     await order.save();
-    await order.populate(['customer', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
+    await order.populate(['customer', 'wholesalerGroups.wholesaler','wholesalerGroups.items.product',  'rider', 'items.product']);
     emitOrderUpdate(req, order);
     res.json(order);
   } catch (error) {

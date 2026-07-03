@@ -312,7 +312,7 @@ router.put('/orders/:id', protectAdmin, async (req, res) => {
     });
 
     await order.save();
-    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'rider', 'items.product']);
+    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler','wholesalerGroups.items.product',  'rider', 'items.product']);
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
