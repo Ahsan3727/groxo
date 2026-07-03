@@ -17,6 +17,7 @@ router.get('/active-order', protect, async (req, res) => {
       .populate('wholesaler', 'storeName name')                 // old orders
       .populate('wholesalerGroups.wholesaler', 'storeName name') // new groups
       .populate('wholesalerGroups.items.product', 'name price')  // ✅ ADD THIS LINE
+      .populate('wholesalerGroups.items.product', 'name price image')  // ← ADD image HERE
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price');
 
