@@ -204,7 +204,8 @@ router.put('/products/:id/image', protectAdmin, (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
     }
-
+ 
+    
     try {
       // Upload to Cloudinary
       const result = await cloudinary.uploader.upload(req.file.path, {

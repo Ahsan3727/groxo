@@ -7,7 +7,7 @@ const productSchema = new mongoose.Schema({
   price: { type: Number, required: true },
   retailPrice: { type: Number, default: 0 },
 category: { type: String, required: true },  // the category name (string)
-  images: [String],
+  image: { type: String },        // <-- ADD THIS LINE
   weight: { type: Number },  // optional, in kg
 unit: { type: String, enum: ['piece', 'kg', 'liter', 'pack', 'box', 'dozen', 'other'], default: 'piece' },
   stock: { type: Number, default: 0 },
