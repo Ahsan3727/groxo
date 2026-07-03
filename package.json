@@ -11,7 +11,7 @@
     "start:admin": "cd admin && npm start"
   },
   "dependencies": {
-    "cloudinary": "^2.10.0",
+"cloudinary": "^1.41.0",
     "dotenv": "^17.4.2",
     "expo": "~55.0.0",
     "jsonwebtoken": "^9.0.3",
