@@ -1,4 +1,6 @@
 ﻿const User = require('../models/User');
+const Order = require('../models/Order');
+const Settings = require('../models/Settings');
 const generateToken = require('../utils/generateToken');
 
 // Admin login
@@ -23,8 +25,70 @@ exports.me = async (req, res) => {
 
 // Dashboard stats
 exports.dashboard = async (req, res) => {
-  // Add your own stats logic or a placeholder
-  res.json({ message: 'Dashboard data' });
+  try {
+    // Users, broken down by role (customers/riders/wholesalers — admins excluded)
+    const roleCounts = await User.aggregate([
+      { $match: { role: { $ne: 'admin' } } },
+      { $group: { _id: '$role', count: { $sum: 1 } } },
+    ]);
+    const usersByRole = roleCounts.reduce((acc, r) => {
+      acc[r._id] = r.count;
+      return acc;
+    }, {});
+    const totalUsers = roleCounts.reduce((sum, r) => sum + r.count, 0);
+
+    // Every order ever placed
+    const totalOrders = await Order.countDocuments();
+
+    // Revenue = sum of order payments that actually completed — either the
+    // order was delivered (COD collected) or it was paid online.
+    const revenueAgg = await Order.aggregate([
+      { $match: { $or: [{ status: 'delivered' }, { 'payment.status': 'paid' }] } },
+      { $group: { _id: null, total: { $sum: '$payment.amount' } } },
+    ]);
+    const totalRevenue = revenueAgg[0]?.total || 0;
+
+    res.json({ totalUsers, totalOrders, totalRevenue, usersByRole });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ---------- Settings ----------
+exports.getSettings = async (req, res) => {
+  try {
+    let settings = await Settings.findOne();
+    if (!settings) settings = await Settings.create({});
+    res.json({ appName: settings.appName, commission: settings.commission });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateGeneralSettings = async (req, res) => {
+  try {
+    const { appName } = req.body;
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    if (appName !== undefined) settings.appName = appName;
+    await settings.save();
+    res.json({ appName: settings.appName, commission: settings.commission });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+exports.updateCommissionSettings = async (req, res) => {
+  try {
+    const { commission } = req.body;
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    if (commission !== undefined) settings.commission = commission;
+    await settings.save();
+    res.json({ appName: settings.appName, commission: settings.commission });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 };
 
 // Get all users with optional role filter

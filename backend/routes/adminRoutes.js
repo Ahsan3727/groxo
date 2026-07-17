@@ -12,6 +12,9 @@ const {
   createUser,
   updateUser,
   deleteUser,
+  getSettings,
+  updateGeneralSettings,
+  updateCommissionSettings,
 } = require('../controllers/adminController');
 const { protectAdmin } = require('../middleware/authMiddleware');
 const User = require('../models/User');
@@ -58,6 +61,11 @@ function checkFileType(file, cb) {
 router.post('/login', login);
 router.get('/me', protectAdmin, me);
 router.get('/dashboard', protectAdmin, dashboard);
+
+// ---------- Settings ----------
+router.get('/settings', protectAdmin, getSettings);
+router.put('/settings/general', protectAdmin, updateGeneralSettings);
+router.put('/settings/commission', protectAdmin, updateCommissionSettings);
  
 // ---------- User Management ----------
 router.get('/users', protectAdmin, getUsers);
@@ -406,12 +414,105 @@ router.get('/riders', protectAdmin, async (req, res) => {
   }
 });
  
+// ---------- Reports ----------
+// GET /api/admin/reports/sales — weekly revenue buckets (last 8 weeks)
+router.get('/reports/sales', protectAdmin, async (req, res) => {
+  try {
+    const WEEKS = 8;
+    const now = new Date();
+
+    // Build 8 consecutive 7-day buckets ending "now", oldest first
+    const buckets = [];
+    for (let i = WEEKS - 1; i >= 0; i--) {
+      const end = new Date(now);
+      end.setDate(end.getDate() - i * 7);
+      const start = new Date(end);
+      start.setDate(end.getDate() - 7);
+      buckets.push({ start, end, revenue: 0 });
+    }
+
+    const orders = await Order.find({
+      createdAt: { $gte: buckets[0].start },
+      $or: [{ status: 'delivered' }, { 'payment.status': 'paid' }],
+    }).select('createdAt payment.amount');
+
+    orders.forEach((o) => {
+      const t = new Date(o.createdAt);
+      const bucket = buckets.find((b) => t >= b.start && t < b.end);
+      if (bucket) bucket.revenue += o.payment?.amount || 0;
+    });
+
+    const data = buckets.map((b) => ({
+      period: `${b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${b.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      revenue: b.revenue,
+    }));
+
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/reports/rider-performance
+router.get('/reports/rider-performance', protectAdmin, async (req, res) => {
+  try {
+    // A delivery counts as "on time" if it went from out_for_delivery to
+    // delivered within this many minutes. No delivery deadline is stored
+    // anywhere yet, so this is a business default rather than a real target.
+    const ON_TIME_THRESHOLD_MINUTES = 45;
+
+    const riders = await User.find({ role: 'rider' }).select('name');
+
+    const data = await Promise.all(
+      riders.map(async (rider) => {
+        const orders = await Order.find({ rider: rider._id, status: 'delivered' })
+          .select('riderEarning timeline rating');
+
+        let earnings = 0;
+        let onTimeCount = 0;
+        let ratingSum = 0;
+        let ratedCount = 0;
+
+        orders.forEach((o) => {
+          earnings += o.riderEarning || 0;
+
+          if (typeof o.rating === 'number') {
+            ratingSum += o.rating;
+            ratedCount += 1;
+          }
+
+          const timeline = o.timeline || [];
+          const outEntry = [...timeline].reverse().find((t) => t.status === 'out_for_delivery');
+          const deliveredEntry = [...timeline].reverse().find((t) => t.status === 'delivered');
+          if (outEntry && deliveredEntry) {
+            const minutes = (new Date(deliveredEntry.timestamp) - new Date(outEntry.timestamp)) / 60000;
+            if (minutes <= ON_TIME_THRESHOLD_MINUTES) onTimeCount += 1;
+          }
+        });
+
+        return {
+          _id: rider._id,
+          name: rider.name,
+          earnings,
+          onTime: orders.length ? Math.round((onTimeCount / orders.length) * 100) : 0,
+          rating: ratedCount ? Number((ratingSum / ratedCount).toFixed(1)) : null,
+        };
+      })
+    );
+
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // ---------- Support Tickets ----------
 // GET /api/admin/tickets
 router.get('/tickets', protectAdmin, async (req, res) => {
   try {
     const tickets = await SupportTicket.find()
       .populate('user', 'name email')
+      .populate('replies.sender', 'name role')
       .sort('-createdAt');
     res.json({ tickets });
   } catch (error) {
@@ -428,6 +529,29 @@ router.put('/tickets/:id', protectAdmin, async (req, res) => {
       { status },
       { new: true }
     );
+    if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+    res.json(ticket);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/tickets/:id/reply  (admin replies to a ticket)
+router.post('/tickets/:id/reply', protectAdmin, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ message: 'Reply message is required' });
+    }
+
+    const ticket = await SupportTicket.findByIdAndUpdate(
+      req.params.id,
+      { $push: { replies: { sender: req.user._id, message: message.trim() } } },
+      { new: true }
+    )
+      .populate('user', 'name email')
+      .populate('replies.sender', 'name role');
+
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
     res.json(ticket);
   } catch (error) {

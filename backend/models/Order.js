@@ -110,6 +110,10 @@ const orderSchema = new mongoose.Schema({
     status: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
     transactionId: String,
   },
+  // Customer's rating of this delivery (1-5). Nothing writes to this yet —
+  // it's here so rider-performance reporting has a real field to average
+  // once a "rate your delivery" flow exists on the customer side.
+  rating: { type: Number, min: 1, max: 5 },
   timeline: [{
     status: String,
     timestamp: { type: Date, default: Date.now },
