@@ -1,7 +1,17 @@
 ﻿const User = require('../models/User');
 const Order = require('../models/Order');
+const Product = require('../models/Product');
 const Settings = require('../models/Settings');
+const AdminAuditLog = require('../models/AdminAuditLog');
 const generateToken = require('../utils/generateToken');
+
+// Fire-and-forget audit log write — never let a logging failure block or
+// fail the admin action that triggered it.
+const logAdminAction = (adminId, action, targetType, targetId, details) => {
+  AdminAuditLog.create({ admin: adminId, action, targetType, targetId, details }).catch((err) =>
+    console.error('Audit log write failed:', err.message)
+  );
+};
 
 // Admin login
 exports.login = async (req, res) => {
@@ -19,7 +29,7 @@ exports.login = async (req, res) => {
 
 // Get current admin
 exports.me = async (req, res) => {
-  const admin = await User.findById(req.admin._id).select('-password');
+  const admin = await User.findById(req.user._id).select('-password');
   res.json(admin);
 };
 
@@ -152,6 +162,9 @@ exports.updateUser = async (req, res) => {
     const updated = await user.save();
     const response = updated.toObject();
     delete response.password;
+
+    logAdminAction(req.user._id, 'user.update', 'User', user._id, req.body);
+
     res.json(response);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -159,9 +172,47 @@ exports.updateUser = async (req, res) => {
 };
 
 // Delete user
+//
+// Previously this hard-deleted with no referential-integrity check at all:
+// deleting a wholesaler orphaned their products (dangling `wholesaler` ref),
+// and deleting a rider orphaned any order that referenced them. This now
+// blocks the delete when dependent records exist. To remove a wholesaler/
+// rider anyway, either reassign/clear their dependent records first, or
+// deactivate them instead (PUT /admin/users/:id with isActive: false) —
+// deactivation was already supported, it just wasn't the guided path.
 exports.deleteUser = async (req, res) => {
   try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.role === 'wholesaler') {
+      const productCount = await Product.countDocuments({ wholesaler: user._id });
+      if (productCount > 0) {
+        return res.status(400).json({
+          message: `Cannot delete: this wholesaler has ${productCount} product(s) listed. Deactivate the account instead (isActive: false), or remove/reassign their products first.`,
+        });
+      }
+    }
+
+    if (user.role === 'rider') {
+      const activeOrderCount = await Order.countDocuments({
+        rider: user._id,
+        status: { $nin: ['delivered', 'cancelled'] },
+      });
+      if (activeOrderCount > 0) {
+        return res.status(400).json({
+          message: `Cannot delete: this rider has ${activeOrderCount} active order(s) assigned. Reassign or complete them first, or deactivate the account instead.`,
+        });
+      }
+    }
+
     await User.findByIdAndDelete(req.params.id);
+
+    logAdminAction(req.user._id, 'user.delete', 'User', user._id, {
+      deletedRole: user.role,
+      deletedEmail: user.email,
+    });
+
     res.json({ message: 'User removed' });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -24,6 +24,15 @@ const Banner = require('../models/Banner');
 const SupportTicket = require('../models/SupportTicket');
 const Transaction = require('../models/Transaction');
 const WithdrawalRequest = require('../models/WithdrawalRequest');
+const AdminAuditLog = require('../models/AdminAuditLog');
+
+// Fire-and-forget audit log write — never let a logging failure block or
+// fail the admin action that triggered it.
+const logAdminAction = (adminId, action, targetType, targetId, details) => {
+  AdminAuditLog.create({ admin: adminId, action, targetType, targetId, details }).catch((err) =>
+    console.error('Audit log write failed:', err.message)
+  );
+};
  
 // ---------- Multer configuration (absolute path + auto-create) ----------
 const uploadsDir = path.join(__dirname, '..', 'uploads', 'products');
@@ -269,6 +278,19 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
+    const priceChanged =
+      (price != null && price !== product.price) ||
+      (wholesalerPrice != null && wholesalerPrice !== product.wholesalerPrice) ||
+      (adminPrice != null && adminPrice !== product.adminPrice) ||
+      (retailPrice != null && retailPrice !== product.retailPrice);
+    const priceBefore = {
+      price: product.price,
+      wholesalerPrice: product.wholesalerPrice,
+      adminPrice: product.adminPrice,
+      retailPrice: product.retailPrice,
+    };
+    const statusChanged = status && status !== product.status;
+
     if (name !== undefined) product.name = name;
     if (description !== undefined) product.description = description;
     if (category !== undefined) product.category = category;
@@ -288,6 +310,17 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
 
     await product.save();
     await product.populate('wholesaler', 'storeName name email');
+
+    if (statusChanged) {
+      logAdminAction(req.user._id, `product.${status}`, 'Product', product._id, { status });
+    }
+    if (priceChanged) {
+      logAdminAction(req.user._id, 'product.price_change', 'Product', product._id, {
+        before: priceBefore,
+        after: { price, wholesalerPrice, adminPrice, retailPrice },
+      });
+    }
+
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -338,6 +371,11 @@ router.put('/orders/settle-all', protectAdmin, async (req, res) => {
  
     const result = await Order.updateMany(filter, { riderSettled: true });
  
+    logAdminAction(req.user._id, 'order.settle_all', 'Order', null, {
+      riderId: riderId || 'all',
+      modifiedCount: result.modifiedCount,
+    });
+
     res.json({
       message: `Settled ${result.modifiedCount} orders`,
       modifiedCount: result.modifiedCount,
@@ -380,6 +418,8 @@ router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
     order.riderSettled = true;
     await order.save();
  
+    logAdminAction(req.user._id, 'order.settle', 'Order', order._id, { rider: order.rider });
+
     res.json({ message: 'Rider marked as settled', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -398,6 +438,12 @@ router.put('/orders/:orderId/pay-wholesaler-group', protectAdmin, async (req, re
  
     order.wholesalerGroups[groupIndex].paid = true;
     await order.save();
+
+    logAdminAction(req.user._id, 'order.pay_wholesaler_group', 'Order', order._id, {
+      groupIndex,
+      wholesaler: order.wholesalerGroups[groupIndex].wholesaler,
+    });
+
     res.json({ message: 'Wholesaler marked as paid', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -571,8 +617,16 @@ router.get('/transactions', protectAdmin, async (req, res) => {
       transactions.push(
         ...payments.map((t) => ({
           _id: t._id,
-          type: 'payment',
+          type: 'payment',            // category the UI tabs/filters on — unchanged
+          transactionType: t.type,    // the real value: 'credit' | 'debit' (previously dropped)
           amount: t.amount,
+          description: t.description,
+          reference: t.reference,
+          balanceBefore: t.balanceBefore,
+          balanceAfter: t.balanceAfter,
+          // A Transaction document only ever exists once a ledger entry has
+          // actually posted, so 'completed' is accurate here — unlike
+          // withdrawals below, this model has no pending/failed state.
           status: 'completed',
           user: t.user,
           createdAt: t.createdAt,
@@ -612,6 +666,11 @@ router.put('/transactions/:id', protectAdmin, async (req, res) => {
     withdrawal.processedAt = new Date();
     await withdrawal.save();
  
+    logAdminAction(req.user._id, `withdrawal.${withdrawal.status}`, 'WithdrawalRequest', withdrawal._id, {
+      amount: withdrawal.amount,
+      user: withdrawal.user,
+    });
+
     res.json(withdrawal);
   } catch (error) {
     res.status(500).json({ message: error.message });

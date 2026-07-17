@@ -8,7 +8,29 @@ const app = express();
 const http = require('http');
 const socketIo = require('socket.io');
 const server = http.createServer(app);
-const io = socketIo(server, { cors: { origin: '*' } });
+
+// ---- CORS allowlist ----
+// ALLOWED_ORIGINS is a comma-separated list of origins allowed to call this
+// API from a browser (the admin panel web app). Native mobile clients
+// (CustomerApp/RiderApp/WholesalerApp) aren't affected — CORS is a
+// browser-enforced restriction and doesn't apply to their HTTP requests,
+// which typically send no Origin header at all (allowed below).
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS: origin "${origin}" is not allowed`));
+  },
+  credentials: true,
+};
+
+const io = socketIo(server, { cors: corsOptions });
 
 // Make io accessible in routes
 app.set('io', io);
@@ -32,8 +54,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Socket disconnected'));
 });
 
-// ---- CORS: Allow all origins for development ----
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 connectDB();
