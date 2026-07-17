@@ -237,21 +237,62 @@ router.put('/products/:id/image', protectAdmin, (req, res) => {
 });
  
 // ---------- Generic product update – now AFTER the image route ----------
+// PUT /api/admin/products/:id
+// Accepts any subset of the product's editable fields so the admin catalog
+// page can update name, price and every other product detail in one call.
 router.put('/products/:id', protectAdmin, async (req, res) => {
   try {
-    const { status, adminPrice, retailPrice } = req.body;
+    const {
+      name,
+      description,
+      category,
+      unit,
+      weight,
+      price,            // wholesaler's submitted / base price
+      wholesalerPrice,  // kept in sync with `price` for older records
+      adminPrice,       // final price the platform sells at
+      retailPrice,      // suggested retail price
+      stock,
+      lowStockThreshold,
+      isActive,
+      status,
+    } = req.body;
+
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
- 
+
+    if (name !== undefined) product.name = name;
+    if (description !== undefined) product.description = description;
+    if (category !== undefined) product.category = category;
+    if (unit !== undefined) product.unit = unit;
+    if (weight !== undefined) product.weight = weight;
+    if (price != null) product.price = price;
+    if (wholesalerPrice != null) product.wholesalerPrice = wholesalerPrice;
+    if (adminPrice != null) product.adminPrice = adminPrice;
+    if (retailPrice != null) product.retailPrice = retailPrice;
+    if (stock != null) product.stock = stock;
+    if (lowStockThreshold != null) product.lowStockThreshold = lowStockThreshold;
+    if (isActive !== undefined) product.isActive = isActive;
     if (status) {
       product.status = status;
       product.isApproved = status === 'approved';
     }
-    if (adminPrice != null) product.adminPrice = adminPrice;
-    if (retailPrice != null) product.retailPrice = retailPrice;
- 
+
     await product.save();
+    await product.populate('wholesaler', 'storeName name email');
     res.json(product);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- Delete a product ----------
+// DELETE /api/admin/products/:id
+router.delete('/products/:id', protectAdmin, async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    res.json({ message: 'Product deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
