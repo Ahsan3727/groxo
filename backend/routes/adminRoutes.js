@@ -25,6 +25,7 @@ const {
 const { assignRider } = require('../controllers/orderController');
 const generateInvoicePDF = require('../utils/generateInvoice');
 const { protectAdmin } = require('../middleware/authMiddleware');
+const { loginLimiter } = require('../middleware/rateLimiter');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
@@ -108,7 +109,7 @@ function checkFileType(file, cb) {
 }
  
 // ---------- Auth / Admin info ----------
-router.post('/login', login);
+router.post('/login', loginLimiter, login);
 router.get('/me', protectAdmin, me);
 router.get('/dashboard', protectAdmin, dashboard);
 

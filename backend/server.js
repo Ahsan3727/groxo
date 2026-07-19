@@ -2,6 +2,33 @@
 const cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
+
+// ---- Fail fast on missing/weak required config ----
+// Previously JWT_SECRET had no validation anywhere: if it was unset, some
+// code paths would throw at request time (confusing 500s) and one code
+// path (config/environment.js) silently fell back to the guessable string
+// 'dev_secret'. Neither is acceptable for a secret that signs admin auth
+// tokens, so the server now refuses to boot at all if this isn't set
+// correctly, with a clear message instead of a runtime surprise.
+const KNOWN_WEAK_JWT_SECRETS = new Set(['dev_secret', 'superSecretKey123', 'secret', 'changeme']);
+
+function requireEnv() {
+  const missing = ['JWT_SECRET', 'MONGO_URI'].filter((key) => !process.env[key]);
+  if (missing.length) {
+    console.error(`Missing required environment variable(s): ${missing.join(', ')}. Copy backend/.env.example to backend/.env and fill in real values.`);
+    process.exit(1);
+  }
+  if (process.env.JWT_SECRET.length < 32) {
+    console.error('JWT_SECRET is too short (need 32+ random characters). Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"');
+    process.exit(1);
+  }
+  if (KNOWN_WEAK_JWT_SECRETS.has(process.env.JWT_SECRET)) {
+    console.error('JWT_SECRET is set to a known example/placeholder value. Generate a real random secret before starting the server.');
+    process.exit(1);
+  }
+}
+requireEnv();
+
 const connectDB = require('./config/db');
 
 const app = express();
@@ -54,8 +81,14 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Socket disconnected'));
 });
 
+const { apiLimiter } = require('./middleware/rateLimiter');
+
 app.use(cors(corsOptions));
 app.use(express.json());
+// Baseline rate limit on everything under /api — the stricter loginLimiter
+// on /login and /register routes applies on top of this for those specific
+// endpoints.
+app.use('/api', apiLimiter);
 
 connectDB();
 
