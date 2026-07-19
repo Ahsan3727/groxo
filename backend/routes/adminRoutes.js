@@ -35,7 +35,7 @@ const Transaction = require('../models/Transaction');
 const WithdrawalRequest = require('../models/WithdrawalRequest');
 const AdminAuditLog = require('../models/AdminAuditLog');
 const Category = require('../models/Category');
-const { parseCSV, stringifyCSV } = require('../utils/Csv');
+// const { parseCSV, stringifyCSV } = require('../utils/Csv');
 
 // Separate multer instance (memory storage) for CSV import — the disk-based
 // `upload` below is specifically wired for product image uploads.
