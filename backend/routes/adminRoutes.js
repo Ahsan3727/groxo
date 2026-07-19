@@ -10,6 +10,7 @@ const {
   me,
   dashboard,
   getUsers,
+  getUserSummary,
   createUser,
   updateUser,
   deleteUser,
@@ -74,6 +75,26 @@ const upload = multer({
     checkFileType(file, cb);
   },
 }).single('productImage');
+
+// Same pattern as the product-image upload above, reused for banners so the
+// Banners page gets a real upload flow instead of a raw-URL paste field.
+const bannerUploadsDir = path.join(__dirname, '..', 'uploads', 'banners');
+if (!fs.existsSync(bannerUploadsDir)) {
+  fs.mkdirSync(bannerUploadsDir, { recursive: true });
+}
+const bannerStorage = multer.diskStorage({
+  destination: bannerUploadsDir,
+  filename: function (req, file, cb) {
+    cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+  },
+});
+const uploadBannerImage = multer({
+  storage: bannerStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: function (req, file, cb) {
+    checkFileType(file, cb);
+  },
+}).single('bannerImage');
  
 function checkFileType(file, cb) {
   const filetypes = /jpeg|jpg|png|gif/;
@@ -98,6 +119,7 @@ router.put('/settings/commission', protectAdmin, updateCommissionSettings);
  
 // ---------- User Management ----------
 router.get('/users', protectAdmin, getUsers);
+router.get('/users/:id/summary', protectAdmin, getUserSummary);
 router.post('/users', protectAdmin, createUser);
 router.put('/users/:id', protectAdmin, updateUser);
 router.delete('/users/:id', protectAdmin, deleteUser);
@@ -1010,27 +1032,60 @@ router.get('/reports/rider-performance', protectAdmin, async (req, res) => {
 
 // ---------- Support Tickets ----------
 // GET /api/admin/tickets
+const TICKET_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
+
+// GET /api/admin/tickets?status=&search=  (status filter + subject/customer search)
 router.get('/tickets', protectAdmin, async (req, res) => {
   try {
-    const tickets = await SupportTicket.find()
+    const { status, search } = req.query;
+    const filter = {};
+    if (status && TICKET_STATUSES.includes(status)) filter.status = status;
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: escaped, $options: 'i' };
+      const matchingUsers = await User.find({ $or: [{ name: regex }, { email: regex }] }).select('_id');
+      filter.$or = [{ subject: regex }, { user: { $in: matchingUsers.map((u) => u._id) } }];
+    }
+
+    const tickets = await SupportTicket.find(filter)
       .populate('user', 'name email')
       .populate('replies.sender', 'name role')
+      .populate('assignedTo', 'name email')
       .sort('-createdAt');
     res.json({ tickets });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
- 
-// PUT /api/admin/tickets/:id  (mark resolved)
+
+// PUT /api/admin/tickets/:id  (update status and/or assignee)
+// The model defines open/in_progress/resolved/closed, but this used to only
+// ever be driven with 'resolved' from the UI — status is now validated
+// against the full enum, and assignedTo (previously unused) can be set here
+// too, so a ticket can be handed to a specific staff member.
 router.put('/tickets/:id', protectAdmin, async (req, res) => {
   try {
-    const { status } = req.body;
-    const ticket = await SupportTicket.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
+    const { status, assignedTo } = req.body;
+    const update = {};
+
+    if (status !== undefined) {
+      if (!TICKET_STATUSES.includes(status)) {
+        return res.status(400).json({ message: `Status must be one of: ${TICKET_STATUSES.join(', ')}` });
+      }
+      update.status = status;
+    }
+
+    if (assignedTo !== undefined) {
+      update.assignedTo = assignedTo || null; // allow unassigning with '' or null
+    }
+
+    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, update, { new: true })
+      .populate('user', 'name email')
+      .populate('replies.sender', 'name role')
+      .populate('assignedTo', 'name email');
+
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
     res.json(ticket);
   } catch (error) {
@@ -1052,7 +1107,8 @@ router.post('/tickets/:id/reply', protectAdmin, async (req, res) => {
       { new: true }
     )
       .populate('user', 'name email')
-      .populate('replies.sender', 'name role');
+      .populate('replies.sender', 'name role')
+      .populate('assignedTo', 'name email');
 
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
     res.json(ticket);
@@ -1062,50 +1118,104 @@ router.post('/tickets/:id/reply', protectAdmin, async (req, res) => {
 });
  
 // ---------- Transactions (payments + withdrawals combined) ----------
-// GET /api/admin/transactions?type=payment|withdrawal
+// Shared builder behind both the JSON list route and the CSV export route,
+// so filtering logic (type/userId/search) only lives in one place.
+async function buildTransactions({ type, userId, search }) {
+  let userFilter = {};
+
+  if (userId) {
+    // Explicit user id always wins over free-text search when both are given.
+    userFilter = { user: userId };
+  } else if (search && search.trim()) {
+    const term = search.trim();
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = { $regex: escaped, $options: 'i' };
+    const matchingUsers = await User.find({ $or: [{ name: regex }, { email: regex }] }).select('_id');
+    userFilter = { user: { $in: matchingUsers.map((u) => u._id) } };
+  }
+
+  let transactions = [];
+
+  if (!type || type === 'payment') {
+    const payments = await Transaction.find(userFilter).populate('user', 'name email').sort('-createdAt');
+    transactions.push(
+      ...payments.map((t) => ({
+        _id: t._id,
+        type: 'payment',            // category the UI tabs/filters on — unchanged
+        transactionType: t.type,    // the real value: 'credit' | 'debit' (previously dropped)
+        amount: t.amount,
+        description: t.description,
+        reference: t.reference,
+        balanceBefore: t.balanceBefore,
+        balanceAfter: t.balanceAfter,
+        // A Transaction document only ever exists once a ledger entry has
+        // actually posted, so 'completed' is accurate here — unlike
+        // withdrawals below, this model has no pending/failed state.
+        status: 'completed',
+        user: t.user,
+        createdAt: t.createdAt,
+      }))
+    );
+  }
+
+  if (!type || type === 'withdrawal') {
+    const withdrawals = await WithdrawalRequest.find(userFilter).populate('user', 'name email').sort('-createdAt');
+    transactions.push(
+      ...withdrawals.map((w) => ({
+        _id: w._id,
+        type: 'withdrawal',
+        amount: w.amount,
+        status: w.status,
+        user: w.user,
+        createdAt: w.createdAt,
+      }))
+    );
+  }
+
+  transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return transactions;
+}
+
+// GET /api/admin/transactions?type=payment|withdrawal&userId=&search=
 router.get('/transactions', protectAdmin, async (req, res) => {
   try {
-    const { type } = req.query;
-    let transactions = [];
- 
-    if (!type || type === 'payment') {
-      const payments = await Transaction.find().populate('user', 'name email').sort('-createdAt');
-      transactions.push(
-        ...payments.map((t) => ({
-          _id: t._id,
-          type: 'payment',            // category the UI tabs/filters on — unchanged
-          transactionType: t.type,    // the real value: 'credit' | 'debit' (previously dropped)
-          amount: t.amount,
-          description: t.description,
-          reference: t.reference,
-          balanceBefore: t.balanceBefore,
-          balanceAfter: t.balanceAfter,
-          // A Transaction document only ever exists once a ledger entry has
-          // actually posted, so 'completed' is accurate here — unlike
-          // withdrawals below, this model has no pending/failed state.
-          status: 'completed',
-          user: t.user,
-          createdAt: t.createdAt,
-        }))
-      );
-    }
- 
-    if (!type || type === 'withdrawal') {
-      const withdrawals = await WithdrawalRequest.find().populate('user', 'name email').sort('-createdAt');
-      transactions.push(
-        ...withdrawals.map((w) => ({
-          _id: w._id,
-          type: 'withdrawal',
-          amount: w.amount,
-          status: w.status,
-          user: w.user,
-          createdAt: w.createdAt,
-        }))
-      );
-    }
- 
-    transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const { type, userId, search } = req.query;
+    const transactions = await buildTransactions({ type, userId, search });
     res.json({ transactions });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/transactions/export?type=&userId=&search=  — CSV download.
+// Reuses the exact same filtering as the JSON list above, so what an admin
+// sees on screen is exactly what they get in the file (no separate query
+// logic to drift out of sync).
+router.get('/transactions/export', protectAdmin, async (req, res) => {
+  try {
+    const { type, userId, search } = req.query;
+    const transactions = await buildTransactions({ type, userId, search });
+
+    const rows = transactions.map((t) => ({
+      id: t._id,
+      date: t.createdAt ? new Date(t.createdAt).toISOString() : '',
+      type: t.type,
+      transactionType: t.transactionType || '',
+      user: t.user?.name || '',
+      email: t.user?.email || '',
+      amount: t.amount,
+      status: t.status,
+      description: t.description || '',
+      reference: t.reference || '',
+    }));
+
+    const csv = stringifyCSV(rows, [
+      'id', 'date', 'type', 'transactionType', 'user', 'email', 'amount', 'status', 'description', 'reference',
+    ]);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="transactions-${Date.now()}.csv"`);
+    res.send(csv);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -1141,9 +1251,62 @@ router.get('/banners', protectAdmin, async (req, res) => {
  
 router.post('/banners', protectAdmin, async (req, res) => {
   try {
-    const { imageUrl, link, isActive, order } = req.body;
-    const banner = await Banner.create({ imageUrl, link, isActive, order });
+    const { imageUrl, link, isActive, order, startDate, endDate } = req.body;
+    const banner = await Banner.create({
+      imageUrl, link, isActive, order,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    });
     res.status(201).json(banner);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/banners/upload-image — same Cloudinary pattern the product
+// catalog already uses, but standalone (no banner id needed yet) so it can
+// run from inside the create modal before the banner document exists.
+// Registered before /banners/:id so this literal path isn't swallowed by it.
+router.post('/banners/upload-image', protectAdmin, (req, res) => {
+  uploadBannerImage(req, res, async (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({ message: err.message || err });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file selected' });
+    }
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: 'groxo-banners',
+        use_filename: true,
+        unique_filename: true,
+      });
+      fs.unlinkSync(req.file.path);
+      res.json({ message: 'Image uploaded', image: result.secure_url });
+    } catch (error) {
+      console.error('Cloudinary upload error:', error);
+      res.status(500).json({ message: 'Image upload failed' });
+    }
+  });
+});
+
+// PUT /api/admin/banners/reorder  { order: [id1, id2, id3, ...] }
+// Bulk-writes the `order` field for every banner in one round trip, so the
+// frontend's drag-and-drop reorder can persist the whole new sequence at
+// once instead of one PUT per row.
+router.put('/banners/reorder', protectAdmin, async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order) || order.length === 0) {
+      return res.status(400).json({ message: 'order must be a non-empty array of banner ids' });
+    }
+    const ops = order.map((id, index) => ({
+      updateOne: { filter: { _id: id }, update: { order: index } },
+    }));
+    await Banner.bulkWrite(ops);
+    const banners = await Banner.find().sort('order');
+    res.json(banners);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

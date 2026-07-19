@@ -116,13 +116,103 @@ exports.updateCommissionSettings = async (req, res) => {
   }
 };
 
-// Get all users with optional role filter
+// Get all users with optional role filter, search, and pagination.
+//
+// Backward compatible: callers that don't pass `page` (e.g. the Support
+// Tickets staff picker, which just wants `?role=admin`) still get the old
+// plain-array response. Passing `page` opts into the paginated shape
+// { users, total, page, pages }, matching the convention already used by
+// GET /admin/products.
 exports.getUsers = async (req, res) => {
   try {
-    const { role } = req.query;
-    const filter = role ? { role } : {};
-    const users = await User.find(filter).select('-password').sort('-createdAt');
-    res.json(users);
+    const { role, search } = req.query;
+    const filter = {};
+    if (role) filter.role = role;
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: escaped, $options: 'i' };
+      filter.$or = [{ name: regex }, { email: regex }, { phone: regex }];
+    }
+
+    if (req.query.page === undefined) {
+      const users = await User.find(filter).select('-password').sort('-createdAt');
+      return res.json(users);
+    }
+
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 200);
+
+    const total = await User.countDocuments(filter);
+    const users = await User.find(filter)
+      .select('-password')
+      .sort('-createdAt')
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({ users, total, page, pages: Math.max(Math.ceil(total / limit), 1) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Read-only "view" summary for a single user — gives the User Management
+// page a quick profile glance (order history for a customer, delivery
+// stats for a rider, product counts for a wholesaler) without routing the
+// admin through the editable form just to look.
+exports.getUserSummary = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const base = {
+      _id: user._id, name: user.name, email: user.email, phone: user.phone,
+      role: user.role, isActive: user.isActive, createdAt: user.createdAt,
+    };
+
+    if (user.role === 'customer') {
+      const orders = await Order.find({ customer: user._id }).sort('-createdAt');
+      const totalSpent = orders
+        .filter((o) => o.status === 'delivered' || o.payment?.status === 'paid')
+        .reduce((sum, o) => sum + (o.payment?.amount || 0), 0);
+      return res.json({
+        ...base,
+        totalOrders: orders.length,
+        totalSpent,
+        lastOrder: orders[0]
+          ? { _id: orders[0]._id, orderNumber: orders[0].orderNumber, status: orders[0].status, createdAt: orders[0].createdAt }
+          : null,
+      });
+    }
+
+    if (user.role === 'rider') {
+      const delivered = await Order.find({ rider: user._id, status: 'delivered' }).sort('-createdAt');
+      const activeAssignments = await Order.countDocuments({
+        rider: user._id,
+        status: { $in: ['confirmed', 'packing', 'ready_for_pickup', 'out_for_delivery'] },
+      });
+      return res.json({
+        ...base,
+        totalDeliveries: delivered.length,
+        activeAssignments,
+        lastDelivery: delivered[0]
+          ? { _id: delivered[0]._id, orderNumber: delivered[0].orderNumber, createdAt: delivered[0].createdAt }
+          : null,
+      });
+    }
+
+    if (user.role === 'wholesaler') {
+      const [totalProducts, approvedProducts, pendingProducts] = await Promise.all([
+        Product.countDocuments({ wholesaler: user._id }),
+        Product.countDocuments({ wholesaler: user._id, status: 'approved' }),
+        Product.countDocuments({ wholesaler: user._id, status: 'pending' }),
+      ]);
+      return res.json({ ...base, totalProducts, approvedProducts, pendingProducts });
+    }
+
+    // admin or any other role — no activity stats to show
+    res.json(base);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
