@@ -26,7 +26,7 @@ const Transaction = require('../models/Transaction');
 const WithdrawalRequest = require('../models/WithdrawalRequest');
 const AdminAuditLog = require('../models/AdminAuditLog');
 const Category = require('../models/Category');
-const { parseCSV, stringifyCSV } = require('../utils/csv');
+const { parseCSV, stringifyCSV } = require('../utils/Csv');
 
 // Separate multer instance (memory storage) for CSV import — the disk-based
 // `upload` below is specifically wired for product image uploads.
@@ -46,6 +46,35 @@ const logAdminAction = (adminId, action, targetType, targetId, details) => {
     console.error('Audit log write failed:', err.message)
   );
 };
+
+// Builds a MongoDB $geoWithin polygon filter for `field` from Leaflet-style
+// bounding-box query params (swLat, swLng, neLat, neLng). Returns null when
+// bounds aren't supplied, so callers can fall back to an unscoped fetch
+// (e.g. before the map has reported its first viewport).
+const buildBoundsFilter = (field, query) => {
+  const { swLat, swLng, neLat, neLng } = query;
+  if ([swLat, swLng, neLat, neLng].some((v) => v === undefined || v === '' || Number.isNaN(Number(v)))) {
+    return null;
+  }
+  const sw = [Number(swLng), Number(swLat)];
+  const ne = [Number(neLng), Number(neLat)];
+  return {
+    [field]: {
+      $geoWithin: {
+        $geometry: {
+          type: 'Polygon',
+          coordinates: [[sw, [ne[0], sw[1]], ne, [sw[0], ne[1]], sw]],
+        },
+      },
+    },
+  };
+};
+
+// Viewing customer live location is personally sensitive, so it's audit
+// logged — but not on every 5-60s poll, or the log would be pure noise.
+// Rate-limited to once per admin per cooldown window instead.
+const customerLocationLastLogged = new Map(); // adminId -> timestamp
+const CUSTOMER_LOCATION_LOG_COOLDOWN_MS = 5 * 60 * 1000;
  
 // ---------- Multer configuration (absolute path + auto-create) ----------
 const uploadsDir = path.join(__dirname, '..', 'uploads', 'products');
@@ -100,20 +129,52 @@ router.delete('/users/:id', protectAdmin, deleteUser);
 // Riders
 router.get('/riders/locations', protectAdmin, async (req, res) => {
   try {
-    const riders = await User.find({ role: 'rider' }).select('-password');
-    const data = riders.map(r => ({
-      _id: r._id,
-      name: r.name,
-      email: r.email,
-      phone: r.phone,
-      isActive: r.isActive,
-      vehicle: r.vehicle,
-      currentLocation: r.currentLocation
-        ? { lat: r.currentLocation.coordinates[1], lng: r.currentLocation.coordinates[0] }
-        : null,
-      lastLocationUpdate: r.lastLocationUpdate,
-      status: r.isActive ? 'online' : 'offline',
-    }));
+    const filter = { role: 'rider' };
+    const boundsFilter = buildBoundsFilter('currentLocation', req.query);
+    if (boundsFilter) Object.assign(filter, boundsFilter);
+
+    const riders = await User.find(filter).select('-password');
+    const riderIds = riders.map((r) => r._id);
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Real status/stats, derived from actual orders — not fields the schema
+    // never populates. "Busy" = currently has an order out for delivery.
+    const [busyRiderIds, deliveryCounts, todayEarnings] = await Promise.all([
+      Order.distinct('rider', { rider: { $in: riderIds }, status: 'out_for_delivery' }),
+      Order.aggregate([
+        { $match: { rider: { $in: riderIds }, status: 'delivered' } },
+        { $group: { _id: '$rider', count: { $sum: 1 } } },
+      ]),
+      Order.aggregate([
+        { $match: { rider: { $in: riderIds }, status: 'delivered', updatedAt: { $gte: startOfToday } } },
+        { $group: { _id: '$rider', total: { $sum: '$riderEarning' } } },
+      ]),
+    ]);
+
+    const busySet = new Set(busyRiderIds.map((id) => id.toString()));
+    const deliveryCountMap = new Map(deliveryCounts.map((d) => [d._id.toString(), d.count]));
+    const todayEarningsMap = new Map(todayEarnings.map((e) => [e._id.toString(), e.total]));
+
+    const data = riders.map(r => {
+      const idStr = r._id.toString();
+      return {
+        _id: r._id,
+        name: r.name,
+        email: r.email,
+        phone: r.phone,
+        isActive: r.isActive,
+        vehicle: r.vehicle,
+        currentLocation: r.currentLocation
+          ? { lat: r.currentLocation.coordinates[1], lng: r.currentLocation.coordinates[0] }
+          : null,
+        lastLocationUpdate: r.lastLocationUpdate,
+        status: busySet.has(idStr) ? 'busy' : (r.isActive ? 'online' : 'offline'),
+        totalDeliveries: deliveryCountMap.get(idStr) || 0,
+        earnings: { today: todayEarningsMap.get(idStr) || 0 },
+      };
+    });
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -121,9 +182,45 @@ router.get('/riders/locations', protectAdmin, async (req, res) => {
 });
  
 // Customers
+//
+// Live customer location on an ops map is only actually needed while a
+// delivery to that customer is in progress — there's no operational reason
+// to track someone's live position once their order is delivered/cancelled,
+// or if they've never ordered. Scoping to active orders (rather than every
+// customer account) is the main privacy control here, on top of the
+// rate-limited audit log below.
+const ACTIVE_ORDER_STATUSES = ['pending', 'confirmed', 'packing', 'ready_for_pickup', 'out_for_delivery', 'disputed'];
+
 router.get('/customers/locations', protectAdmin, async (req, res) => {
   try {
-    const customers = await User.find({ role: 'customer' }).select('-password');
+    const activeCustomerIds = await Order.distinct('customer', { status: { $in: ACTIVE_ORDER_STATUSES } });
+
+    const filter = { role: 'customer', _id: { $in: activeCustomerIds } };
+    const boundsFilter = buildBoundsFilter('currentLocation', req.query);
+    if (boundsFilter) {
+      // A bounds filter on currentLocation alone would hide customers who
+      // only have the static address fallback below — OR them together so
+      // the viewport filter doesn't silently drop those.
+      const { swLat, swLng, neLat, neLng } = req.query;
+      filter.$or = [
+        boundsFilter,
+        {
+          'address.lat': { $gte: Number(swLat), $lte: Number(neLat) },
+          'address.lng': { $gte: Number(swLng), $lte: Number(neLng) },
+        },
+      ];
+    }
+
+    const customers = await User.find(filter).select('-password');
+
+    // Rate-limited audit log — see comment on the constants above.
+    const adminIdStr = req.user._id.toString();
+    const lastLogged = customerLocationLastLogged.get(adminIdStr);
+    if (!lastLogged || Date.now() - lastLogged > CUSTOMER_LOCATION_LOG_COOLDOWN_MS) {
+      customerLocationLastLogged.set(adminIdStr, Date.now());
+      logAdminAction(req.user._id, 'customer_locations.view', 'User', null, { count: customers.length });
+    }
+
     const data = customers.map(c => {
       let loc = null;
       if (c.currentLocation && c.currentLocation.coordinates && c.currentLocation.coordinates.length === 2) {
@@ -158,7 +255,14 @@ router.get('/customers/locations', protectAdmin, async (req, res) => {
 // Wholesalers – returns saved shopLocation (permanent) and falls back to live location
 router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
   try {
-    const wholesalers = await User.find({ role: 'wholesaler' }).select('-password');
+    const filter = { role: 'wholesaler' };
+    const shopBounds = buildBoundsFilter('shopLocation', req.query);
+    const liveBounds = buildBoundsFilter('currentLocation', req.query);
+    if (shopBounds && liveBounds) {
+      filter.$or = [shopBounds, liveBounds];
+    }
+
+    const wholesalers = await User.find(filter).select('-password');
     const data = wholesalers.map(w => {
       let location = null;
  
