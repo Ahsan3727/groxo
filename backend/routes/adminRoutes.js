@@ -25,6 +25,19 @@ const SupportTicket = require('../models/SupportTicket');
 const Transaction = require('../models/Transaction');
 const WithdrawalRequest = require('../models/WithdrawalRequest');
 const AdminAuditLog = require('../models/AdminAuditLog');
+const Category = require('../models/Category');
+const { parseCSV, stringifyCSV } = require('../utils/csv');
+
+// Separate multer instance (memory storage) for CSV import — the disk-based
+// `upload` below is specifically wired for product image uploads.
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    const ok = /csv$/i.test(path.extname(file.originalname)) || file.mimetype === 'text/csv';
+    cb(ok ? null : new Error('Only .csv files are accepted'), ok);
+  },
+});
 
 // Fire-and-forget audit log write — never let a logging failure block or
 // fail the admin action that triggered it.
@@ -191,27 +204,257 @@ router.get('/wholesalers/locations', protectAdmin, async (req, res) => {
 });
  
 // ---------- Product Approval ----------
+// GET /api/admin/products/pending?page=&limit=
 router.get('/products/pending', protectAdmin, async (req, res) => {
   try {
-    const products = await Product.find({ status: 'pending' })
-      .populate('wholesaler', 'storeName name email');
-    res.json(products);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const filter = { status: 'pending' };
+
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .populate('wholesaler', 'storeName name email')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({ products, total, page, pages: Math.max(Math.ceil(total / limit), 1) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
  
-// ---------- Product Catalog ----------
-// GET /api/admin/products – all products with details
-router.get('/products', protectAdmin, async (req, res) => {
+// PUT /api/admin/products/bulk  { ids: [...], action: 'approve'|'reject', rejectionReason? }
+router.put('/products/bulk', protectAdmin, async (req, res) => {
   try {
-    const products = await Product.find({})
-      .populate('wholesaler', 'storeName name email')
-      .sort({ createdAt: -1 });
-    res.json(products);
+    const { ids, action, rejectionReason } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'No products selected' });
+    }
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ message: 'Invalid action' });
+    }
+
+    const products = await Product.find({ _id: { $in: ids } });
+
+    await Promise.all(
+      products.map((p) => {
+        if (action === 'approve') {
+          p.status = 'approved';
+          p.isApproved = true;
+          // Only fall back to the wholesaler's price when the admin hasn't
+          // already set one — never clobber a price that was set earlier.
+          if (p.adminPrice == null) p.adminPrice = p.wholesalerPrice ?? p.price;
+          p.rejectionReason = '';
+        } else {
+          p.status = 'rejected';
+          p.isApproved = false;
+          p.rejectionReason = (rejectionReason || '').trim();
+        }
+        return p.save();
+      })
+    );
+
+    logAdminAction(req.user._id, `product.bulk_${action}`, 'Product', null, {
+      ids,
+      count: products.length,
+      rejectionReason: action === 'reject' ? rejectionReason : undefined,
+    });
+
+    res.json({
+      message: `${products.length} product(s) ${action === 'approve' ? 'approved' : 'rejected'}`,
+      count: products.length,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+// GET /api/admin/products?page=&limit=&search=&category= – paginated catalog
+router.get('/products', protectAdmin, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { search, category } = req.query;
+
+    const filter = {};
+    if (category && category !== 'all') filter.category = category;
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: escaped, $options: 'i' };
+
+      const matchingWholesalers = await User.find({
+        role: 'wholesaler',
+        $or: [{ name: regex }, { storeName: regex }],
+      }).select('_id');
+
+      filter.$or = [
+        { name: regex },
+        { category: regex },
+        { wholesaler: { $in: matchingWholesalers.map((w) => w._id) } },
+      ];
+    }
+
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .populate('wholesaler', 'storeName name email')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({ products, total, page, pages: Math.max(Math.ceil(total / limit), 1) });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/admin/products/export?search=&category= – full CSV export
+// (ignores pagination — always exports the complete matching set)
+router.get('/products/export', protectAdmin, async (req, res) => {
+  try {
+    const { search, category } = req.query;
+    const filter = {};
+    if (category && category !== 'all') filter.category = category;
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: escaped, $options: 'i' };
+      const matchingWholesalers = await User.find({
+        role: 'wholesaler',
+        $or: [{ name: regex }, { storeName: regex }],
+      }).select('_id');
+      filter.$or = [
+        { name: regex },
+        { category: regex },
+        { wholesaler: { $in: matchingWholesalers.map((w) => w._id) } },
+      ];
+    }
+
+    const products = await Product.find(filter)
+      .populate('wholesaler', 'storeName name email')
+      .sort({ createdAt: -1 });
+
+    const columns = [
+      'id', 'name', 'category', 'unit', 'weight', 'price', 'wholesalerPrice',
+      'adminPrice', 'retailPrice', 'stock', 'lowStockThreshold', 'status',
+      'isActive', 'wholesalerEmail', 'wholesalerStoreName', 'description',
+    ];
+    const rows = products.map((p) => ({
+      id: p._id.toString(),
+      name: p.name,
+      category: p.category,
+      unit: p.unit,
+      weight: p.weight ?? '',
+      price: p.price ?? '',
+      wholesalerPrice: p.wholesalerPrice ?? '',
+      adminPrice: p.adminPrice ?? '',
+      retailPrice: p.retailPrice ?? '',
+      stock: p.stock ?? 0,
+      lowStockThreshold: p.lowStockThreshold ?? 5,
+      status: p.status,
+      isActive: p.isActive,
+      wholesalerEmail: p.wholesaler?.email || '',
+      wholesalerStoreName: p.wholesaler?.storeName || '',
+      description: p.description || '',
+    }));
+
+    const csv = stringifyCSV(rows, columns);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="groxo-catalog-${Date.now()}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/admin/products/import  (multipart 'csvFile') – bulk create/update
+//
+// Expected columns: name, category, unit, price, adminPrice, retailPrice,
+// stock, lowStockThreshold, wholesalerEmail, description (weight optional).
+// An `id` column updates that existing product instead of creating a new
+// one. `wholesalerEmail` must match an existing wholesaler account.
+router.post('/products/import', protectAdmin, (req, res) => {
+  csvUpload.single('csvFile')(req, res, async (err) => {
+    if (err) return res.status(400).json({ message: err.message });
+    if (!req.file) return res.status(400).json({ message: 'No CSV file uploaded' });
+
+    try {
+      const rows = parseCSV(req.file.buffer.toString('utf8'));
+      if (rows.length === 0) {
+        return res.status(400).json({ message: 'CSV has no data rows' });
+      }
+
+      const wholesalerEmails = [...new Set(rows.map((r) => r.wholesalerEmail).filter(Boolean))];
+      const wholesalers = await User.find({ role: 'wholesaler', email: { $in: wholesalerEmails } });
+      const wholesalerByEmail = new Map(wholesalers.map((w) => [w.email.toLowerCase(), w]));
+
+      let created = 0;
+      let updated = 0;
+      const errors = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 2; // +1 for header row, +1 for 1-indexing
+
+        if (!r.name || !r.category) {
+          errors.push(`Row ${rowNum}: name and category are required`);
+          continue;
+        }
+
+        const fields = {
+          name: r.name,
+          category: r.category,
+          unit: r.unit || 'piece',
+          weight: r.weight ? Number(r.weight) : undefined,
+          price: r.price !== '' ? Number(r.price) : undefined,
+          wholesalerPrice: r.price !== '' ? Number(r.price) : undefined,
+          adminPrice: r.adminPrice !== '' ? Number(r.adminPrice) : undefined,
+          retailPrice: r.retailPrice !== '' ? Number(r.retailPrice) : undefined,
+          stock: r.stock !== '' ? Number(r.stock) : undefined,
+          lowStockThreshold: r.lowStockThreshold !== '' ? Number(r.lowStockThreshold) : undefined,
+          description: r.description || undefined,
+        };
+        Object.keys(fields).forEach((k) => fields[k] === undefined && delete fields[k]);
+
+        if (r.id) {
+          const product = await Product.findById(r.id);
+          if (!product) {
+            errors.push(`Row ${rowNum}: no product with id "${r.id}" — skipped`);
+            continue;
+          }
+          Object.assign(product, fields);
+          await product.save();
+          updated++;
+        } else {
+          const wholesaler = r.wholesalerEmail ? wholesalerByEmail.get(r.wholesalerEmail.toLowerCase()) : null;
+          if (!wholesaler) {
+            errors.push(`Row ${rowNum}: wholesalerEmail "${r.wholesalerEmail || ''}" not found — skipped`);
+            continue;
+          }
+          if (fields.price === undefined) {
+            errors.push(`Row ${rowNum}: price is required for new products — skipped`);
+            continue;
+          }
+          await Product.create({ ...fields, wholesaler: wholesaler._id, status: 'pending' });
+          created++;
+        }
+      }
+
+      logAdminAction(req.user._id, 'product.csv_import', 'Product', null, {
+        fileName: req.file.originalname,
+        created,
+        updated,
+        errorCount: errors.length,
+      });
+
+      res.json({ created, updated, errors });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
 });
  
 // ---------- IMAGE UPLOAD – Cloudinary powered, permanent storage ----------
@@ -273,6 +516,7 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
       lowStockThreshold,
       isActive,
       status,
+      rejectionReason,
     } = req.body;
 
     const product = await Product.findById(req.params.id);
@@ -306,13 +550,21 @@ router.put('/products/:id', protectAdmin, async (req, res) => {
     if (status) {
       product.status = status;
       product.isApproved = status === 'approved';
+      if (status === 'rejected') {
+        product.rejectionReason = (rejectionReason || '').trim();
+      } else if (status === 'approved') {
+        product.rejectionReason = '';
+      }
     }
 
     await product.save();
     await product.populate('wholesaler', 'storeName name email');
 
     if (statusChanged) {
-      logAdminAction(req.user._id, `product.${status}`, 'Product', product._id, { status });
+      logAdminAction(req.user._id, `product.${status}`, 'Product', product._id, {
+        status,
+        rejectionReason: status === 'rejected' ? product.rejectionReason : undefined,
+      });
     }
     if (priceChanged) {
       logAdminAction(req.user._id, 'product.price_change', 'Product', product._id, {

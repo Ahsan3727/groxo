@@ -19,6 +19,7 @@ unit: { type: String, enum: ['piece', 'kg', 'liter', 'pack', 'box', 'dozen', 'ot
 adminPrice: { type: Number },               // final price set by admin
 wholesalerPrice: { type: Number },           // cost price from wholesaler
 status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  rejectionReason: { type: String, default: '' },
 });
 
 module.exports = mongoose.model('Product', productSchema);
