@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 const cloudinary = require('../config/cloudinary'); // ✅ Cloudinary import
 const {
   login,
@@ -16,6 +17,12 @@ const {
   updateGeneralSettings,
   updateCommissionSettings,
 } = require('../controllers/adminController');
+// Reused as-is for the admin-namespaced assign-rider route below — this is
+// the "good" rider-assignment path (sets status to confirmed, pushes a
+// timeline entry, sends a push notification), shared with the non-admin
+// `PUT /orders/:id/assign` route so both stay in sync with one implementation.
+const { assignRider } = require('../controllers/orderController');
+const generateInvoicePDF = require('../utils/generateInvoice');
 const { protectAdmin } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const Order = require('../models/Order');
@@ -26,7 +33,7 @@ const Transaction = require('../models/Transaction');
 const WithdrawalRequest = require('../models/WithdrawalRequest');
 const AdminAuditLog = require('../models/AdminAuditLog');
 const Category = require('../models/Category');
-const { parseCSV, stringifyCSV } = require('../utils/Csv');
+const { parseCSV, stringifyCSV } = require('../utils/csv');
 
 // Separate multer instance (memory storage) for CSV import — the disk-based
 // `upload` below is specifically wired for product image uploads.
@@ -46,35 +53,6 @@ const logAdminAction = (adminId, action, targetType, targetId, details) => {
     console.error('Audit log write failed:', err.message)
   );
 };
-
-// Builds a MongoDB $geoWithin polygon filter for `field` from Leaflet-style
-// bounding-box query params (swLat, swLng, neLat, neLng). Returns null when
-// bounds aren't supplied, so callers can fall back to an unscoped fetch
-// (e.g. before the map has reported its first viewport).
-const buildBoundsFilter = (field, query) => {
-  const { swLat, swLng, neLat, neLng } = query;
-  if ([swLat, swLng, neLat, neLng].some((v) => v === undefined || v === '' || Number.isNaN(Number(v)))) {
-    return null;
-  }
-  const sw = [Number(swLng), Number(swLat)];
-  const ne = [Number(neLng), Number(neLat)];
-  return {
-    [field]: {
-      $geoWithin: {
-        $geometry: {
-          type: 'Polygon',
-          coordinates: [[sw, [ne[0], sw[1]], ne, [sw[0], ne[1]], sw]],
-        },
-      },
-    },
-  };
-};
-
-// Viewing customer live location is personally sensitive, so it's audit
-// logged — but not on every 5-60s poll, or the log would be pure noise.
-// Rate-limited to once per admin per cooldown window instead.
-const customerLocationLastLogged = new Map(); // adminId -> timestamp
-const CUSTOMER_LOCATION_LOG_COOLDOWN_MS = 5 * 60 * 1000;
  
 // ---------- Multer configuration (absolute path + auto-create) ----------
 const uploadsDir = path.join(__dirname, '..', 'uploads', 'products');
@@ -125,7 +103,36 @@ router.put('/users/:id', protectAdmin, updateUser);
 router.delete('/users/:id', protectAdmin, deleteUser);
  
 // ---------- Location Endpoints (for HubMap) ----------
- 
+
+// Builds a MongoDB $geoWithin polygon filter for `field` from Leaflet-style
+// bounding-box query params (swLat, swLng, neLat, neLng). Returns null when
+// bounds aren't supplied, so callers can fall back to an unscoped fetch
+// (e.g. before the map has reported its first viewport).
+const buildBoundsFilter = (field, query) => {
+  const { swLat, swLng, neLat, neLng } = query;
+  if ([swLat, swLng, neLat, neLng].some((v) => v === undefined || v === '' || Number.isNaN(Number(v)))) {
+    return null;
+  }
+  const sw = [Number(swLng), Number(swLat)];
+  const ne = [Number(neLng), Number(neLat)];
+  return {
+    [field]: {
+      $geoWithin: {
+        $geometry: {
+          type: 'Polygon',
+          coordinates: [[sw, [ne[0], sw[1]], ne, [sw[0], ne[1]], sw]],
+        },
+      },
+    },
+  };
+};
+
+// Viewing customer live location is personally sensitive, so it's audit
+// logged — but not on every 5-60s poll, or the log would be pure noise.
+// Rate-limited to once per admin per cooldown window instead.
+const customerLocationLastLogged = new Map(); // adminId -> timestamp
+const CUSTOMER_LOCATION_LOG_COOLDOWN_MS = 5 * 60 * 1000;
+
 // Riders
 router.get('/riders/locations', protectAdmin, async (req, res) => {
   try {
@@ -696,18 +703,60 @@ router.delete('/products/:id', protectAdmin, async (req, res) => {
 });
  
 // ---------- Order Management ----------
+// GET /api/admin/orders?status=&search=&startDate=&endDate=&page=&limit=
+//
+// `search` matches (case-insensitively) the order number, the customer's
+// name, or the customer's phone. A full 24-char Mongo id is also matched
+// exactly against `_id`, so pasting an id from a URL/log still works.
+// `startDate`/`endDate` are plain 'YYYY-MM-DD' strings filtered against
+// `createdAt` (endDate is inclusive of the whole day).
 router.get('/orders', protectAdmin, async (req, res) => {
   try {
-    const { status } = req.query;
-    const filter = status ? { status } : {};
+    const { status, search, startDate, endDate } = req.query;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+
+    const filter = {};
+    if (status) filter.status = status;
+
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) filter.createdAt.$gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) filter.createdAt.$lte = new Date(`${endDate}T23:59:59.999Z`);
+    }
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: escaped, $options: 'i' };
+
+      const matchingCustomers = await User.find({
+        role: 'customer',
+        $or: [{ name: regex }, { phone: regex }],
+      }).select('_id');
+
+      const orConditions = [
+        { orderNumber: regex },
+        { customer: { $in: matchingCustomers.map((c) => c._id) } },
+      ];
+      if (mongoose.Types.ObjectId.isValid(term) && term.length === 24) {
+        orConditions.push({ _id: term });
+      }
+      filter.$or = orConditions;
+    }
+
+    const total = await Order.countDocuments(filter);
     const orders = await Order.find(filter)
       .populate('customer', 'name email phone')
       .populate('wholesaler', 'name storeName')
       .populate('wholesalerGroups.wholesaler', 'name storeName')
       .populate('rider', 'name phone vehicle')
       .populate('items.product', 'name price')
-      .sort('-createdAt');
-    res.json(orders);
+      .sort('-createdAt')
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({ orders, total, page, pages: Math.max(Math.ceil(total / limit), 1) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -741,30 +790,81 @@ router.put('/orders/settle-all', protectAdmin, async (req, res) => {
   }
 });
  
-// PUT /api/admin/orders/:id  (update order status / assign rider)
+// PUT /api/admin/orders/:id  (update order status)
+//
+// Rider assignment used to be silently supported here too via a bare
+// `rider` field — no status change, no timeline entry, no notification.
+// That half-working path is gone: assigning a rider now only happens
+// through PUT /admin/orders/:id/assign below, which shares the same
+// implementation as the customer/rider-app route (status → confirmed,
+// timeline entry, push notification) instead of a second divergent one.
 router.put('/orders/:id', protectAdmin, async (req, res) => {
   try {
-    const { status, rider } = req.body;
+    const { status, reason } = req.body;
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
- 
+
     if (status) order.status = status;
-    if (rider) order.rider = rider;
- 
+
+    if (status === 'cancelled' && reason && reason.trim()) {
+      order.cancellationReason = reason.trim();
+    }
+
     order.timeline.push({
       status: status || order.status,
       timestamp: new Date(),
-      note: `Admin updated to ${status || order.status}`,
+      note: status === 'cancelled' && order.cancellationReason
+        ? `Cancelled by admin — ${order.cancellationReason}`
+        : `Admin updated to ${status || order.status}`,
     });
- 
+
     await order.save();
-    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler','wholesalerGroups.items.product',  'rider', 'items.product']);
+    await order.populate(['customer', 'wholesaler', 'wholesalerGroups.wholesaler', 'wholesalerGroups.items.product', 'rider', 'items.product']);
+
+    if (status === 'cancelled') {
+      logAdminAction(req.user._id, 'order.cancel', 'Order', order._id, {
+        reason: order.cancellationReason || undefined,
+      });
+    }
+
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
- 
+
+// PUT /api/admin/orders/:id/assign  – proper admin-namespaced rider assignment.
+// Previously the admin panel called PUT /api/orders/:id/assign directly
+// (no /admin prefix), which only worked because `protect` doesn't check
+// role — a landmine if role restrictions on /api/orders are ever
+// tightened. This mounts the exact same controller logic under the admin
+// namespace so it's consistently guarded by `protectAdmin` like every
+// other action on this page. The original /api/orders/:id/assign route is
+// left in place for any non-admin (e.g. rider self-service) callers.
+router.put('/orders/:id/assign', protectAdmin, assignRider);
+
+// GET /api/admin/orders/:id/invoice  – downloadable PDF receipt for one order
+router.get('/orders/:id/invoice', protectAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate('customer', 'name email phone')
+      .populate('wholesaler', 'name storeName phone')
+      .populate('wholesalerGroups.wholesaler', 'name storeName phone')
+      .populate('rider', 'name phone')
+      .populate('items.product', 'name price')
+      .populate('wholesalerGroups.items.product', 'name price');
+
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    const filename = `invoice-${order.orderNumber || order._id.toString().slice(-6)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    generateInvoicePDF(order, res);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // PUT /api/admin/orders/:id/settle  – mark rider as settled (old single order)
 router.put('/orders/:id/settle', protectAdmin, async (req, res) => {
   try {

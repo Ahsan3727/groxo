@@ -58,7 +58,22 @@ exports.dashboard = async (req, res) => {
     ]);
     const totalRevenue = revenueAgg[0]?.total || 0;
 
-    res.json({ totalUsers, totalOrders, totalRevenue, usersByRole });
+    // Active orders = still in the pipeline (not yet delivered/cancelled/disputed).
+    // Kept in sync with the definition the admin panel's "live hub status"
+    // strip used to compute client-side from the full order list.
+    const activeOrders = await Order.countDocuments({
+      status: { $in: ['confirmed', 'packing', 'out_for_delivery'] },
+    });
+
+    // Top 4 most recent orders — just enough fields for the Dashboard's
+    // "Recent orders" card, so it never has to pull the whole collection.
+    const recentOrders = await Order.find()
+      .select('orderNumber customer status payment.amount createdAt')
+      .populate('customer', 'name')
+      .sort('-createdAt')
+      .limit(4);
+
+    res.json({ totalUsers, totalOrders, totalRevenue, usersByRole, activeOrders, recentOrders });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
