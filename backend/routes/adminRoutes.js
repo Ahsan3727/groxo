@@ -35,7 +35,7 @@ const Transaction = require('../models/Transaction');
 const WithdrawalRequest = require('../models/WithdrawalRequest');
 const AdminAuditLog = require('../models/AdminAuditLog');
 const Category = require('../models/Category');
-// const { parseCSV, stringifyCSV } = require('../utils/Csv');
+const { parseCSV, stringifyCSV } = require('../utils/csv');
 
 // Separate multer instance (memory storage) for CSV import — the disk-based
 // `upload` below is specifically wired for product image uploads.
@@ -71,7 +71,7 @@ const storage = multer.diskStorage({
  
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max — client now compresses images before upload, this is just a safety ceiling
   fileFilter: function (req, file, cb) {
     checkFileType(file, cb);
   },
@@ -91,21 +91,26 @@ const bannerStorage = multer.diskStorage({
 });
 const uploadBannerImage = multer({
   storage: bannerStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max — client now compresses images before upload, this is just a safety ceiling
   fileFilter: function (req, file, cb) {
     checkFileType(file, cb);
   },
 }).single('bannerImage');
  
 function checkFileType(file, cb) {
-  const filetypes = /jpeg|jpg|png|gif/;
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = filetypes.test(file.mimetype);
-  if (mimetype && extname) {
+  // Previously only accepted jpeg/jpg/png/gif — this silently rejected
+  // HEIC/HEIF photos, which is the default camera format on iPhones. Mobile
+  // browsers are also inconsistent about what mimetype they report for
+  // HEIC (some send 'application/octet-stream' or leave it blank), so we
+  // accept on either the extension OR the mimetype matching, not both.
+  const allowedExt = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
+  const allowedMime = /^image\/(jpeg|jpg|png|gif|webp|heic|heif|octet-stream)$/i;
+  const extOk = allowedExt.test(file.originalname || '');
+  const mimeOk = allowedMime.test(file.mimetype || '');
+  if (extOk || mimeOk) {
     return cb(null, true);
-  } else {
-    cb('Error: Images Only!');
   }
+  cb(new Error('Please upload a JPG, PNG, WEBP, or HEIC image.'));
 }
  
 // ---------- Auth / Admin info ----------
@@ -596,7 +601,7 @@ router.put('/products/:id/image', protectAdmin, (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
       console.error('Multer error:', err);
-      return res.status(400).json({ message: err });
+      return res.status(400).json({ message: err.message || err });
     }
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
