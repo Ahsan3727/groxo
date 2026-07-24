@@ -32,23 +32,13 @@ exports.protectAdmin = async (req, res, next) => {
   });
 };
 
-// Alias — chatRoutes.js, locationRoutes.js, notificationRoutes.js,
-// paymentRoutes.js, reportRoutes.js and supportRoutes.js were all written
-// against an `authMiddleware` export that never existed on this file (only
-// `protect`/`protectAdmin` did). Since those routes were never mounted in
-// server.js, this went unnoticed — requiring any of those files calls
-// router.post/get with an undefined handler, which throws synchronously.
-// Rather than rewrite six already-correct route files, we export the same
-// `protect` function under the name they already expect.
-exports.authMiddleware = exports.protect;
-
-// Generic role-gate — same shape as protectAdmin but for any role(s),
-// matching how locationRoutes/notificationRoutes/reportRoutes call it:
-// roleAuth('rider'), roleAuth('admin'), etc. Must run AFTER authMiddleware
-// in the route's middleware chain (it reads req.user, which authMiddleware sets).
+// Restricts a route to one or more roles, e.g. roleAuth('admin'), roleAuth('rider', 'admin').
+// Must run AFTER `protect` in the middleware chain (it relies on req.user being set).
+// locationRoutes.js, notificationRoutes.js, reportRoutes.js and supportRoutes.js all
+// import this — without it, requiring those files throws at server boot.
 exports.roleAuth = (...roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {
-    return res.status(403).json({ message: `${roles.join('/')} access only` });
+    return res.status(403).json({ message: 'Access denied' });
   }
   next();
 };

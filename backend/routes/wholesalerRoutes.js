@@ -2,6 +2,25 @@
 const router = express.Router();
 const { protect, protectAdmin } = require('../middleware/authMiddleware');
 const User = require('../models/User');
+const { getWholesalerEarnings } = require('../utils/wholesalerEarnings');
+
+// ---------- Earnings summary (single source of truth) ----------
+// Both DashboardScreen.js and EarningsScreen.js previously reconstructed
+// "revenue" client-side from raw GET /orders data using two different rules
+// (all orders vs. delivered-only), which let their numbers drift apart for
+// the same wholesaler/day. Both screens now call this instead.
+// Must be registered before /:id so this literal path isn't swallowed by it.
+router.get('/earnings-summary', protect, async (req, res) => {
+  if (req.user.role !== 'wholesaler') {
+    return res.status(403).json({ message: 'Wholesaler access only' });
+  }
+  try {
+    const summary = await getWholesalerEarnings(req.user._id);
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // ---------- Save shop location (must be before /:id) ----------
 router.put('/location', protect, async (req, res) => {

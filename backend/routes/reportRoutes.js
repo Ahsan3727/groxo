@@ -1,8 +1,8 @@
 ﻿const router = require('express').Router();
 const reportCtrl = require('../controllers/reportController');
-const { authMiddleware, roleAuth } = require('../middleware/authMiddleware');
+const { protect, roleAuth } = require('../middleware/authMiddleware');
 
-router.get('/dashboard', authMiddleware, roleAuth('admin'), reportCtrl.getDashboardStats);
-router.get('/sales', authMiddleware, roleAuth('admin'), reportCtrl.getSalesReport);
+router.get('/dashboard', protect, roleAuth('admin'), reportCtrl.getDashboardStats);
+router.get('/sales', protect, roleAuth('admin'), reportCtrl.getSalesReport);
 
 module.exports = router;

@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema({
   businessLicense: String,
   storeAddress: String,
   isActive: { type: Boolean, default: true },
+  notificationsEnabled: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 
   // ---- Live tracking location (real-time) ----
@@ -43,6 +44,12 @@ const userSchema = new mongoose.Schema({
     address: String,
   },
   locationSet: { type: Boolean, default: false },
+
+  // ---- Forgot-password (OTP based) ----
+  // We store a hash of the OTP (never the raw code) plus an expiry. Both are
+  // cleared after a successful reset or once they expire.
+  resetPasswordOTP: { type: String, select: false },
+  resetPasswordExpire: { type: Date, select: false },
 });
 
 userSchema.pre('save', async function(next) {

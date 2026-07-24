@@ -9,7 +9,6 @@ const {
   updateOrderStatus,
   assignRider,
   updateGroupStatus,          // ← import for group‑status endpoint
-  rateOrder,
 } = require('../controllers/orderController');
 
 // ---------- CUSTOMER: Place order ----------
@@ -100,8 +99,5 @@ router.put('/:id/status', protect, updateOrderStatus);
 
 // ---------- Admin: assign rider ----------
 router.put('/:id/assign', protect, assignRider);
-
-// ---------- CUSTOMER: rate a delivered order ----------
-router.post('/:id/rate', protect, rateOrder);
 
 module.exports = router;

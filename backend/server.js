@@ -72,13 +72,6 @@ io.on('connection', (socket) => {
     console.log(`User ${userId} joined their room`);
   }
 
-  // Admin panel sockets connect with ?role=admin so they can receive the
-  // real-time rider_location_update broadcasts emitted by locationController.
-  if (socket.handshake.query.role === 'admin') {
-    socket.join('admin');
-    console.log(`Socket ${socket.id} joined admin room`);
-  }
-
   // 👇 NEW: Riders join the global 'riders' room
   socket.on('joinRiderRoom', () => {
     socket.join('riders');
@@ -101,11 +94,6 @@ connectDB();
 
 // Mount all routes
 app.use('/api/auth', require('./routes/authRoutes'));
-// NOTE: addressRoutes is mounted at the more specific '/api/users/addresses'
-// path BEFORE the generic '/api/users' mount below. userRoutes defines
-// GET/PUT/DELETE '/:id', which would otherwise treat "addresses" as a user
-// id and swallow every address request before it ever reached addressRoutes.
-app.use('/api/users/addresses', require('./routes/addressRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/rider', require('./routes/riderRoutes'));
@@ -114,15 +102,18 @@ app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/banners', require('./routes/bannerRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
+// All six of these previously imported a non-existent `authMiddleware`/
+// `roleAuth` export and would have crashed the server at startup the
+// instant they were required. Fixed in each route file + roleAuth added to
+// middleware/authMiddleware.js, so it's now safe to mount all of them.
 app.use('/api/chat', require('./routes/chatRoutes'));
-app.use('/api/locations', require('./routes/locationRoutes'));
-app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
-app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/support', require('./routes/supportRoutes'));
+app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/location', require('./routes/locationRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/uploads', express.static('uploads'));
 app.get('/', (req, res) => res.json({ message: 'Groxo API is running' }));
-app.get('/api/rider/dashboard', (req, res) => res.json({ test: true }));
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -13,7 +13,7 @@ function parseCSV(text) {
   const s = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   for (let i = 0; i < s.length; i++) {
-    const c = s[i];
+    const c = s[i]; 
 
     if (inQuotes) {
       if (c === '"') {

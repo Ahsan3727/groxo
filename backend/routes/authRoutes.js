@@ -1,6 +1,14 @@
 ﻿const express = require('express');
 const router = express.Router();
-const { register, login, getMe, updateMe } = require('../controllers/authController');
+const {
+  register,
+  login,
+  getMe,
+  updateMe,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+} = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const { loginLimiter } = require('../middleware/rateLimiter');
 const User = require('../models/User');
@@ -10,6 +18,15 @@ router.post('/register', loginLimiter, register);
 router.post('/login', loginLimiter, login);
 router.get('/me', protect, getMe);
 router.put('/me', protect, updateMe);
+
+// Password recovery (no account needed to be logged in) — reuses the same
+// strict rate limit as login/register since these are prime brute-force /
+// enumeration targets (OTP guessing, account-existence probing).
+router.post('/forgot-password', loginLimiter, forgotPassword);
+router.post('/reset-password', loginLimiter, resetPassword);
+
+// Change password for an already-authenticated user (Settings screen).
+router.put('/change-password', protect, changePassword);
 
 // Push token (only one definition)
 router.put('/push-token', protect, async (req, res) => {

@@ -44,7 +44,12 @@ exports.createOrder = async (req, res) => {
     }
 
     const productIds = items.map(i => i.product);
-    const products = await Product.find({ _id: { $in: productIds } });
+    // Populate the wholesaler so wholesalerGroups[].storeName below is
+    // actually set — previously `product.wholesaler` was an unpopulated
+    // ObjectId at this point, so `.name` was always undefined and every
+    // order's group storeName silently ended up undefined too.
+    const products = await Product.find({ _id: { $in: productIds } })
+      .populate('wholesaler', 'name storeName');
 
     if (products.length !== productIds.length) {
       return res.status(404).json({ message: 'One or more products not found' });
@@ -59,18 +64,6 @@ exports.createOrder = async (req, res) => {
 
     const productMap = {};
     products.forEach(p => { productMap[p._id.toString()] = p; });
-
-    // ---- Stock check: reject the whole order if anything is oversold ----
-    const outOfStock = items.filter(item => {
-      const product = productMap[item.product.toString()];
-      return (item.quantity || 1) > product.stock;
-    });
-    if (outOfStock.length > 0) {
-      const names = outOfStock.map(item => productMap[item.product.toString()].name);
-      return res.status(400).json({
-        message: `Not enough stock for: ${names.join(', ')}`,
-      });
-    }
 
     // Group items by wholesaler
     const groupMap = {};
@@ -89,11 +82,11 @@ exports.createOrder = async (req, res) => {
         price,
       });
 
-      const wid = product.wholesaler.toString();
+      const wid = product.wholesaler._id.toString();
       if (!groupMap[wid]) {
         groupMap[wid] = {
-          wholesaler: product.wholesaler,
-          storeName: product.wholesaler.name,   // ← use name, not storeName
+          wholesaler: product.wholesaler._id,
+          storeName: product.wholesaler.storeName || product.wholesaler.name || 'Store',
           items: [],
         };
       }
@@ -125,13 +118,6 @@ exports.createOrder = async (req, res) => {
     });
 
     console.log('Order created:', order._id);
-
-    // Decrement stock now that the order is confirmed to exist.
-    for (const item of items) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { stock: -(item.quantity || 1) },
-      });
-    }
 
     await order.populate('customer');
     await order.populate('wholesalerGroups.wholesaler', 'storeName name');
@@ -250,6 +236,7 @@ exports.getOrder = async (req, res) => {
       .populate('customer', 'name email phone address')
       .populate('wholesaler', 'name storeName phone')
       .populate('wholesalerGroups.wholesaler', 'name storeName phone')
+      .populate('wholesalerGroups.items.product', 'name price')
       .populate('rider', 'name phone vehicle currentLocation')
       .populate('items.product', 'name price image');
 
@@ -400,33 +387,6 @@ exports.assignRider = async (req, res) => {
     }
 
     emitOrderUpdate(req, order);
-    res.json(order);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ---------- CUSTOMER: RATE A DELIVERED ORDER (new) ----------
-exports.rateOrder = async (req, res) => {
-  try {
-    const { rating, comment } = req.body;
-    const order = await Order.findById(req.params.id);
-
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (order.customer.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'You can only rate your own orders' });
-    }
-    if (order.status !== 'delivered') {
-      return res.status(400).json({ message: 'Only delivered orders can be rated' });
-    }
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
-    }
-
-    order.rating = rating;
-    if (comment) order.comment = comment;
-    await order.save();
-
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });

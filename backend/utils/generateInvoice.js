@@ -17,7 +17,9 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleString('en-PK', { dateStyle: 'me
 function generateInvoicePDF(order, res) {
   const doc = new PDFDocument({ size: 'A4', margin: 48 });
   doc.pipe(res);
-
+ 
+   
+  
   // ---------- Header ----------
   doc
     .fontSize(20)

@@ -80,7 +80,6 @@ const orderSchema = new mongoose.Schema({
     zip: String,
     lat: Number,
     lng: Number,
-    landmark: String,
   },
   status: {
     type: String,
@@ -115,7 +114,6 @@ const orderSchema = new mongoose.Schema({
   // it's here so rider-performance reporting has a real field to average
   // once a "rate your delivery" flow exists on the customer side.
   rating: { type: Number, min: 1, max: 5 },
-  comment: String,
   timeline: [{
     status: String,
     timestamp: { type: Date, default: Date.now },
