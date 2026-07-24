@@ -9,12 +9,18 @@ exports.register = async (req, res) => {
 
     const user = await User.create({ name, email, phone, password, role: role || 'customer' });
     // If the user provided address coordinates, store them as currentLocation
-if (req.body.address && req.body.address.lat && req.body.address.lng) {
-  user.currentLocation = {
-    type: 'Point',
-    coordinates: [req.body.address.lng, req.body.address.lat],
-  };
-  user.lastLocationUpdate = new Date();
+if (req.body.address) {
+  const { street, city, state, zip, lat, lng } = req.body.address;
+  if (street || city || state || zip) {
+    user.address = { street, city, state, zip };
+  }
+  if (lat && lng) {
+    user.currentLocation = {
+      type: 'Point',
+      coordinates: [lng, lat],
+    };
+    user.lastLocationUpdate = new Date();
+  }
   await user.save();
 }
     res.status(201).json({
@@ -57,10 +63,11 @@ exports.updateMe = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { name, phone, vehicle } = req.body;
+    const { name, phone, vehicle, address } = req.body;
     if (name) user.name = name;
     if (phone) user.phone = phone;
     if (vehicle) user.vehicle = vehicle;
+    if (address) user.address = { ...(user.address ? user.address.toObject?.() ?? user.address : {}), ...address };
 
     const updated = await user.save();
     const response = updated.toObject();

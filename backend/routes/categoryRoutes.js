@@ -94,12 +94,11 @@ router.delete('/admin/:id', protect, async (req, res) => {
   }
 });
 
-// ─── WHOLESALER: Get all global categories (for AddProduct screen) ───
+// ─── WHOLESALER/CUSTOMER: Get all global categories ───
+// Wholesalers use this for the AddProduct screen; customers use it to
+// render the storefront category grid on HomeScreen (previously hardcoded
+// client-side). Read-only, so any authenticated role can call it.
 router.get('/global', protect, async (req, res) => {
-  // Wholesaler or admin can fetch global categories
-  if (req.user.role !== 'wholesaler' && req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Access denied' });
-  }
   try {
     const categories = await Category.find({ isGlobal: true }).sort('name');
     res.json({ categories });

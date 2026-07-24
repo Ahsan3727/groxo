@@ -54,6 +54,7 @@ router.get('/', async (req, res) => {
   try {
     const filter = { isApproved: true, status: 'approved' };
     if (req.query.category) filter.category = req.query.category;
+    if (req.query.search) filter.name = { $regex: req.query.search, $options: 'i' };
     const products = await Product.find(filter).populate('wholesaler', 'storeName name');
     res.json({ products });
   } catch (error) {

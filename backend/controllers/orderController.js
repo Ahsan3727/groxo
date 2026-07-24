@@ -60,6 +60,18 @@ exports.createOrder = async (req, res) => {
     const productMap = {};
     products.forEach(p => { productMap[p._id.toString()] = p; });
 
+    // ---- Stock check: reject the whole order if anything is oversold ----
+    const outOfStock = items.filter(item => {
+      const product = productMap[item.product.toString()];
+      return (item.quantity || 1) > product.stock;
+    });
+    if (outOfStock.length > 0) {
+      const names = outOfStock.map(item => productMap[item.product.toString()].name);
+      return res.status(400).json({
+        message: `Not enough stock for: ${names.join(', ')}`,
+      });
+    }
+
     // Group items by wholesaler
     const groupMap = {};
     let totalAmount = 0;
@@ -113,6 +125,13 @@ exports.createOrder = async (req, res) => {
     });
 
     console.log('Order created:', order._id);
+
+    // Decrement stock now that the order is confirmed to exist.
+    for (const item of items) {
+      await Product.findByIdAndUpdate(item.product, {
+        $inc: { stock: -(item.quantity || 1) },
+      });
+    }
 
     await order.populate('customer');
     await order.populate('wholesalerGroups.wholesaler', 'storeName name');
@@ -381,6 +400,33 @@ exports.assignRider = async (req, res) => {
     }
 
     emitOrderUpdate(req, order);
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ---------- CUSTOMER: RATE A DELIVERED ORDER (new) ----------
+exports.rateOrder = async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.customer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'You can only rate your own orders' });
+    }
+    if (order.status !== 'delivered') {
+      return res.status(400).json({ message: 'Only delivered orders can be rated' });
+    }
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+
+    order.rating = rating;
+    if (comment) order.comment = comment;
+    await order.save();
+
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });

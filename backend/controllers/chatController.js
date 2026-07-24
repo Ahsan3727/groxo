@@ -6,7 +6,7 @@ exports.sendMessage = async (req, res, next) => {
     const chat = new ChatMessage({ sender: req.user._id, receiver: receiverId, order: orderId, message });
     await chat.save();
     const io = req.app.get('io');
-    if (io) io.to(`user_${receiverId}`).emit('new_chat_message', chat);
+    if (io) io.to(receiverId.toString()).emit('new_chat_message', chat);
     res.status(201).json(chat);
   } catch (err) {
     next(err);
